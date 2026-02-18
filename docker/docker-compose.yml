@@ -1,0 +1,25 @@
+services:
+  running-coach:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.skills
+    env_file:
+      - ../.env
+    volumes:
+      - running-coach-data:/skill/data
+    working_dir: /skill
+
+  telegram-bot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.skills
+    env_file:
+      - ../.env
+    volumes:
+      - running-coach-data:/skill/data
+    working_dir: /skill
+    command: ["uv", "run", "telegram_bot.py", "bot"]
+    restart: unless-stopped
+
+volumes:
+  running-coach-data:

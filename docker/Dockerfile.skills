@@ -1,0 +1,31 @@
+FROM python:3.12-slim AS base
+
+# Install uv from official image
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /skill
+
+# Copy scripts
+COPY _token_utils.py .
+COPY strava_auth.py .
+COPY strava_sync.py .
+COPY pot10.py .
+COPY plan.py .
+COPY analyze.py .
+COPY telegram_bot.py .
+
+# Copy skill config
+COPY SKILL.md .
+COPY config/ config/
+
+# Pre-cache dependencies for each script
+RUN uv run --script strava_sync.py --help > /dev/null 2>&1 || true
+RUN uv run --script pot10.py --help > /dev/null 2>&1 || true
+RUN uv run --script plan.py --help > /dev/null 2>&1 || true
+RUN uv run --script analyze.py --help > /dev/null 2>&1 || true
+RUN uv run --script telegram_bot.py --help > /dev/null 2>&1 || true
+
+# Data directory (mount as volume)
+RUN mkdir -p /skill/data
+
+CMD ["echo", "RunWhisperer skill ready. Use uv run <script>.py <command>."]

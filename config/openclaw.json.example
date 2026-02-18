@@ -1,0 +1,33 @@
+{
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "bot_token_env": "TELEGRAM_BOT_TOKEN",
+      "chat_id_env": "TELEGRAM_CHAT_ID"
+    }
+  },
+  "skills": {
+    "running-coach": {
+      "enabled": true,
+      "env": {
+        "STRAVA_CLIENT_ID": "",
+        "STRAVA_CLIENT_SECRET": "",
+        "STRAVA_REDIRECT_URI": "http://localhost:8000/callback",
+      "TELEGRAM_BOT_TOKEN": "",
+      "TELEGRAM_CHAT_ID": ""
+      }
+    }
+  },
+  "cron": {
+    "sync_strava": {
+      "schedule": "0 6 * * *",
+      "command": "uv run strava_sync.py sync --days=7",
+      "enabled": true
+    },
+    "send_daily_summary": {
+      "schedule": "0 7 * * *",
+      "command": "uv run telegram_bot.py send_summary --period=daily",
+      "enabled": true
+    }
+  }
+}
