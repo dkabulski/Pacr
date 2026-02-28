@@ -3,13 +3,15 @@
 ## Project Layout
 
 - `SKILL.md` — tool catalog for OpenClaw agent (defines available commands)
-- `_token_utils.py` — shared Strava token management (stdlib only)
-- `strava_auth.py` — one-time OAuth setup (`uv run strava_auth.py authorize`)
-- `strava_sync.py` — fetch & cache Strava activities (`uv run strava_sync.py sync`)
-- `pot10.py` — Power of 10 race results by athlete ID
-- `analyze.py` — rate sessions against plan + HR/pace zones
-- `plan.py` — manage training plan JSON via stdin
-- `telegram_bot.py` — Telegram integration (send + interactive bot)
+- `src/_token_utils.py` — shared Strava token management (stdlib only)
+- `src/strava_auth.py` — one-time OAuth setup (`uv run src/strava_auth.py authorize`)
+- `src/strava_sync.py` — fetch & cache Strava activities (`uv run src/strava_sync.py sync`)
+- `src/pot10.py` — Power of 10 race results by athlete ID ⚠ experimental
+- `src/analyze.py` — rate sessions against plan + HR/pace zones
+- `src/plan.py` — manage training plan JSON via stdin
+- `src/tgbot/formatters.py` — HTML formatters and data helpers for Telegram messages
+- `src/tgbot/context.py` — athlete context building, VDOT helpers, Claude plan generation
+- `src/tgbot/bot.py` — Telegram CLI entry point (send + interactive bot)
 - `config/` — OpenClaw personality, agent behaviour, athlete profile template
 - `data/` — runtime data (gitignored): tokens, activities, plans, results
 - `docker/` — container config for deployment
@@ -37,6 +39,10 @@ just plan        # show training plan
 just deploy      # symlink to OpenClaw skills dir
 just tg-send     # send a test message to Telegram
 just tg-bot      # start interactive Telegram bot
+just docker-build  # build Docker image
+just docker-up     # start telegram-bot container
+just docker-logs   # follow container logs
+just docker-down   # stop containers
 ```
 
 ## Data Files
@@ -50,3 +56,4 @@ just tg-bot      # start interactive Telegram bot
 | `data/training_plan.json` | Current training plan |
 | `data/athlete_zones.json` | HR and pace zones |
 | `data/training_log.json` | Analyzed session log |
+| `data/conversation_history.json` | Telegram chat history (persisted across restarts) |

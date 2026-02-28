@@ -91,7 +91,7 @@ def _merge(existing: list[dict], new: list[dict]) -> list[dict]:
     return sorted(by_id.values(), key=lambda a: a["date"], reverse=True)
 
 
-def sync(days: int = 30) -> None:
+def sync(days: int = 365) -> None:
     """Fetch the last N days of Strava activities."""
     try:
         token = _token_utils.get_valid_token()

@@ -16,7 +16,7 @@ dev = [
     "requests>=2.32",
     "python-dotenv>=1.0",
     "beautifulsoup4>=4.12",
-    "python-telegram-bot>=22.0",
+    "python-telegram-bot[job-queue]>=22.0",
 ]
 
 [tool.ruff]
@@ -28,7 +28,7 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = ["src"]
 
 [tool.mypy]
 python_version = "3.12"

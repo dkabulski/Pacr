@@ -6,7 +6,11 @@
 #     "fire>=0.7",
 # ]
 # ///
-"""Power of 10 race results by athlete ID."""
+"""Power of 10 race results by athlete ID.
+
+⚠ EXPERIMENTAL — Power of 10 website is currently being rebuilt.
+Web scraping may fail. Use manual `add` as the primary workflow.
+"""
 
 from __future__ import annotations
 
@@ -129,7 +133,16 @@ def _save_results(results: list[dict]) -> None:
 
 
 def fetch(athlete_id: int, verbose: bool = False) -> None:
-    """Fetch race results from Power of 10 by athlete ID."""
+    """Fetch race results from Power of 10 by athlete ID.
+
+    ⚠ EXPERIMENTAL: The Power of 10 website is being rebuilt. Web scraping
+    may fail or return incomplete results. Use `add` for reliable manual entry.
+    """
+    print(
+        "⚠  Warning: Power of 10 web fetch is experimental — "
+        "the site is being rebuilt and scraping may fail.\n"
+        "   Use `pot10.py add` for reliable manual entry.\n"
+    )
     url = f"{BASE_URL}?athleteid={athlete_id}"
     print(f"Fetching: {url}")
 
