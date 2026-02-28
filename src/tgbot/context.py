@@ -144,6 +144,7 @@ def _build_athlete_context() -> str:
     import pot10
     import strava_sync
 
+    activities = strava_sync._load_cached()
     lines: list[str] = []
 
     # Coaching personality
@@ -201,6 +202,18 @@ def _build_athlete_context() -> str:
     else:
         lines.append("\nNo training zones configured (run: just zones <maxhr>).")
 
+    # Training load (PMC)
+    from training_load import calculate_load_metrics, volume_spike_check
+
+    load_metrics = calculate_load_metrics(activities)
+    lines.append(
+        f"\nTraining load (PMC): CTL {load_metrics['ctl']:.1f}, "
+        f"ATL {load_metrics['atl']:.1f}, TSB {load_metrics['tsb']:+.1f}."
+    )
+    spike = volume_spike_check(activities)
+    if spike:
+        lines.append(f"Volume warning: {spike}")
+
     # Today's session
     session = _today_session()
     if session:
@@ -209,7 +222,6 @@ def _build_athlete_context() -> str:
         lines.append(f"\nToday's prescribed session: {stype} — {desc}.")
 
     # Activities: individual detail for last 4 weeks, weekly summaries beyond that
-    activities = strava_sync._load_cached()
     if activities:
         cutoff_recent = datetime.now(tz=UTC) - timedelta(days=28)
         cutoff_history = datetime.now(tz=UTC) - timedelta(days=365)
@@ -228,6 +240,9 @@ def _build_athlete_context() -> str:
                 older_acts.append((dt, act))
 
         if recent_acts:
+            from .debrief import load_debriefs
+
+            debriefs = load_debriefs()
             lines.append("\nRecent sessions (last 4 weeks):")
             for _, act in recent_acts:
                 date = act.get("date", "")[:10]
@@ -236,7 +251,13 @@ def _build_athlete_context() -> str:
                 pace = act.get("pace", "N/A")
                 hr = act.get("avg_hr")
                 hr_str = f", HR {hr:.0f} bpm" if hr else ""
-                lines.append(f"  {date} — {name}: {dist:.1f} km @ {pace}/km{hr_str}.")
+                debrief = debriefs.get(str(act.get("id", "")))
+                debrief_suffix = (
+                    f" (RPE {debrief['rpe']}/10 — {debrief['notes']})"
+                    if debrief
+                    else ""
+                )
+                lines.append(f"  {date} — {name}: {dist:.1f} km @ {pace}/km{hr_str}{debrief_suffix}.")
 
         if older_acts:
             weeks_by_iso: dict[tuple[int, int], list[tuple]] = {}

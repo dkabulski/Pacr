@@ -22,7 +22,7 @@ fmt:
 
 # Type check
 typecheck:
-    uv run mypy src/_token_utils.py src/strava_auth.py src/strava_sync.py src/pot10.py src/analyze.py src/plan.py src/tgbot/formatters.py src/tgbot/context.py src/tgbot/bot.py
+    uv run mypy src/_token_utils.py src/strava_auth.py src/strava_sync.py src/pot10.py src/analyze.py src/plan.py src/training_load.py src/tgbot/debrief.py src/tgbot/formatters.py src/tgbot/context.py src/tgbot/bot.py
 
 # Run tests
 test *ARGS:

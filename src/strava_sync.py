@@ -93,11 +93,7 @@ def _merge(existing: list[dict], new: list[dict]) -> list[dict]:
 
 def sync(days: int = 365) -> None:
     """Fetch the last N days of Strava activities."""
-    try:
-        token = _token_utils.get_valid_token()
-    except RuntimeError as e:
-        print(f"Error: {e}")
-        return
+    token = _token_utils.get_valid_token()
 
     after = datetime.now(tz=UTC) - timedelta(days=days)
     after_ts = int(after.timestamp())
@@ -116,24 +112,17 @@ def sync(days: int = 365) -> None:
         )
 
         if resp.status_code == 401:
-            print("Error: Unauthorised. Attempting token refresh...")
-            try:
-                token = _token_utils.get_valid_token()
-                headers = {"Authorization": f"Bearer {token}"}
-                continue
-            except RuntimeError as e:
-                print(f"Refresh failed: {e}")
-                return
+            print("Token expired, refreshing...")
+            token = _token_utils.get_valid_token()
+            headers = {"Authorization": f"Bearer {token}"}
+            continue
 
         if resp.status_code == 429:
-            print("Error: Rate limited by Strava. Try again later.")
-            print(f"Rate limit info: {resp.headers.get('X-RateLimit-Usage', 'N/A')}")
-            return
+            usage = resp.headers.get("X-RateLimit-Usage", "N/A")
+            raise RuntimeError(f"Strava rate limit hit (usage: {usage}). Try again later.")
 
         if resp.status_code != 200:
-            print(f"Error: HTTP {resp.status_code}")
-            print(resp.text[:500])
-            return
+            raise RuntimeError(f"Strava API error: HTTP {resp.status_code} — {resp.text[:200]}")
 
         batch = resp.json()
         if not batch:

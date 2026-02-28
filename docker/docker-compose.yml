@@ -6,7 +6,7 @@ services:
     env_file:
       - ../.env
     volumes:
-      - running-coach-data:/skill/data
+      - ../data:/skill/data
     working_dir: /skill
 
   telegram-bot:
@@ -16,10 +16,7 @@ services:
     env_file:
       - ../.env
     volumes:
-      - running-coach-data:/skill/data
+      - ../data:/skill/data
     working_dir: /skill/src
     command: ["uv", "run", "tgbot/bot.py", "bot"]
     restart: unless-stopped
-
-volumes:
-  running-coach-data:

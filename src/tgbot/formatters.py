@@ -328,6 +328,38 @@ def _format_zones() -> str:
     return "\n".join(lines)
 
 
+def _format_training_load(metrics: dict, trend: list[dict]) -> str:
+    """Format CTL/ATL/TSB and weekly km bar chart as HTML."""
+    ctl = metrics.get("ctl", 0.0)
+    atl = metrics.get("atl", 0.0)
+    tsb = metrics.get("tsb", 0.0)
+
+    if tsb > 5:
+        label = "fresh"
+    elif tsb > -10:
+        label = "neutral"
+    elif tsb > -25:
+        label = "productive"
+    else:
+        label = "high fatigue"
+
+    lines = [
+        "<b>Training Load (PMC)</b>",
+        f"CTL (fitness): {ctl:.1f}",
+        f"ATL (fatigue): {atl:.1f}",
+        f"TSB (form): {tsb:+.1f} — {label}",
+        "",
+        "<b>Weekly km (last 12 weeks)</b>",
+    ]
+    for w in trend:
+        week = w["week"]
+        km = w["km"]
+        bar = "█" * min(int(km / 5), 20)
+        lines.append(f"<code>{week}  {km:5.1f} km  {bar}</code>")
+
+    return "\n".join(lines)
+
+
 def _format_status() -> str:
     """Brief status: last sync, plan exists, today's session."""
     import strava_sync

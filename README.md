@@ -1,5 +1,7 @@
 # RunWhisperer
 
+![Élan](assets/elan-beetroot-v4.svg)
+
 AI running coach built as an [OpenClaw](https://openclaw.dev) skill. Uses Claude to analyse Strava data, look up race results, and manage training plans following Jack Daniels' Running Formula methodology.
 
 ## Overview

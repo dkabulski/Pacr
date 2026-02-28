@@ -41,6 +41,8 @@ from tgbot.context import (  # noqa: E402
     _generate_plan_with_claude,
     _vdot_paces,
 )
+from tgbot.debrief import parse_rpe, save_debrief  # noqa: E402
+from tgbot.km_query import compute_km, describe_period, is_km_query, parse_period  # noqa: E402
 from tgbot.formatters import (  # noqa: E402
     _format_activity_summary,
     _format_last_activity,
@@ -49,6 +51,7 @@ from tgbot.formatters import (  # noqa: E402
     _format_results,
     _format_status,
     _format_today_session,
+    _format_training_load,
     _format_week_vs_plan,
     _format_weekly_summary,
     _format_zones,
@@ -61,6 +64,8 @@ TELEGRAM_MAX_LENGTH = 4096
 _conversation_history: dict[int, list[dict]] = {}
 _MAX_HISTORY = 20  # individual messages (~10 conversational turns)
 _BLOCKED_FILES = {"tokens.json"}  # never exposed to the model
+_pending_debriefs: dict[int, dict] = {}
+# {chat_id: {"activity_id": int, "activity_name": str, "activity_date": str}}
 
 
 # ---------------------------------------------------------------------------
@@ -231,6 +236,8 @@ def bot() -> None:
         import strava_sync
         before_ids = {a["id"] for a in await asyncio.to_thread(strava_sync._load_cached)}
         await asyncio.to_thread(strava_sync.sync, 365)
+        after = await asyncio.to_thread(strava_sync._load_cached)
+        new_acts = [a for a in after if a["id"] not in before_ids]
         note = await asyncio.to_thread(_auto_analyze_new_activities, before_ids)
         if note:
             await context.bot.send_message(
@@ -238,6 +245,18 @@ def bot() -> None:
                 text=f"<b>New activity detected:</b>\n\n{note}",
                 parse_mode="HTML",
             )
+            if new_acts:
+                act = new_acts[0]
+                _pending_debriefs[int(chat_id)] = {
+                    "activity_id": act["id"],
+                    "activity_name": act.get("name", "Run"),
+                    "activity_date": act.get("date", "")[:10],
+                }
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="How did that feel? Reply with RPE 1–10 … or <code>skip</code>.",
+                    parse_mode="HTML",
+                )
 
     async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         status = await asyncio.to_thread(_format_status)
@@ -261,6 +280,19 @@ def bot() -> None:
             note = await asyncio.to_thread(_auto_analyze_new_activities, before_ids)
             if note:
                 await update.message.reply_text(f"<b>New activity analysis:</b>\n\n{note}", parse_mode="HTML")
+            new_acts = [a for a in activities if a["id"] not in before_ids]
+            if note and new_acts:
+                act = new_acts[0]
+                cid = update.effective_chat.id
+                _pending_debriefs[cid] = {
+                    "activity_id": act["id"],
+                    "activity_name": act.get("name", "Run"),
+                    "activity_date": act.get("date", "")[:10],
+                }
+                await update.message.reply_text(
+                    "How did that feel? Reply with RPE 1–10 … or <code>skip</code>.",
+                    parse_mode="HTML",
+                )
         except Exception as e:
             await update.message.reply_text(f"Sync failed: {e}")
 
@@ -363,6 +395,19 @@ def bot() -> None:
         text = await asyncio.to_thread(_format_zones)
         await update.message.reply_text(text, parse_mode="HTML")
 
+    async def cmd_load(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        import strava_sync
+        from training_load import calculate_load_metrics, volume_spike_check, weekly_km_trend
+
+        activities = await asyncio.to_thread(strava_sync._load_cached)
+        metrics = await asyncio.to_thread(calculate_load_metrics, activities)
+        trend = await asyncio.to_thread(weekly_km_trend, activities)
+        spike = await asyncio.to_thread(volume_spike_check, activities)
+        text = _format_training_load(metrics, trend)
+        if spike:
+            text += f"\n\n⚠ {spike}"
+        await update.message.reply_text(text, parse_mode="HTML")
+
     async def cmd_clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         cid = update.effective_chat.id
         _conversation_history.pop(cid, None)
@@ -383,6 +428,7 @@ def bot() -> None:
             "/setplan &lt;goal&gt; — Generate a new training plan with AI\n"
             "    e.g. <code>/setplan half marathon on April 3 2026 in 1:21h</code>\n"
             "/analyze — Analyse latest activity against plan &amp; zones\n"
+            "/load — Training load: CTL/ATL/TSB + weekly km\n"
             "/results — Race results\n"
             "/zones — HR and pace training zones\n"
             "/clear — Clear conversation history\n"
@@ -402,6 +448,46 @@ def bot() -> None:
 
         cid = update.effective_chat.id
         user_text = update.message.text or ""
+
+        pending = _pending_debriefs.get(cid)
+        if pending:
+            if user_text.strip().lower() == "skip":
+                _pending_debriefs.pop(cid, None)
+                await update.message.reply_text("Skipped.")
+                return
+            rpe, notes = parse_rpe(user_text)
+            if rpe:
+                await asyncio.to_thread(
+                    save_debrief,
+                    pending["activity_id"],
+                    pending["activity_name"],
+                    pending["activity_date"],
+                    rpe,
+                    notes,
+                )
+                _pending_debriefs.pop(cid, None)
+                await update.message.reply_text(f"RPE {rpe}/10 logged.")
+                return
+            await update.message.reply_text(
+                "Please reply with 1–10 or <code>skip</code>.", parse_mode="HTML"
+            )
+            return
+
+        if is_km_query(user_text):
+            period = parse_period(user_text)
+            if period:
+                import strava_sync
+
+                start, end = period
+                activities = await asyncio.to_thread(strava_sync._load_cached)
+                result = await asyncio.to_thread(compute_km, activities, start, end)
+                label = describe_period(start, end)
+                km, runs = result["total_km"], result["runs"]
+                s = "s" if runs != 1 else ""
+                reply = f"You logged <b>{km:.1f} km</b> across <b>{runs} run{s}</b> {label}."
+                await update.message.reply_text(reply, parse_mode="HTML")
+                return
+        # (falls through to Claude if period not recognised)
 
         history = _conversation_history.setdefault(cid, [])
         history.append({"role": "user", "content": user_text})
@@ -638,6 +724,7 @@ def bot() -> None:
             BotCommand("plan",    "Show full training plan"),
             BotCommand("setplan", "Generate a new plan with AI"),
             BotCommand("analyze", "Analyse recent sessions"),
+            BotCommand("load",    "Training load: CTL/ATL/TSB + weekly km"),
             BotCommand("results", "Race results"),
             BotCommand("zones",   "HR and pace zones"),
             BotCommand("clear",   "Clear conversation history"),
@@ -657,6 +744,7 @@ def bot() -> None:
     app.add_handler(CommandHandler("plan", cmd_plan, filters=chat_filter))
     app.add_handler(CommandHandler("setplan", cmd_setplan, filters=chat_filter))
     app.add_handler(CommandHandler("analyze", cmd_analyze, filters=chat_filter))
+    app.add_handler(CommandHandler("load", cmd_load, filters=chat_filter))
     app.add_handler(CommandHandler("results", cmd_results, filters=chat_filter))
     app.add_handler(CommandHandler("zones", cmd_zones, filters=chat_filter))
     app.add_handler(CommandHandler("clear", cmd_clear, filters=chat_filter))
