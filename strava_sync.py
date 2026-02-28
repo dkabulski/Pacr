@@ -11,8 +11,7 @@
 from __future__ import annotations
 
 import json
-import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import fire
@@ -23,7 +22,11 @@ import _token_utils
 
 load_dotenv()
 
-ACTIVITIES_PATH = _token_utils.DATA_DIR / "activities.json"
+
+def _activities_path() -> Path:
+    return _token_utils.DATA_DIR / "activities.json"
+
+
 PER_PAGE = 200
 
 
@@ -65,16 +68,16 @@ def normalize_activity(raw: dict) -> dict:
 
 def _load_cached() -> list[dict]:
     """Load cached activities from disk."""
-    if not ACTIVITIES_PATH.exists():
+    if not _activities_path().exists():
         return []
-    with open(ACTIVITIES_PATH) as f:
+    with open(_activities_path()) as f:
         return json.load(f)
 
 
 def _save_cached(activities: list[dict]) -> None:
     """Save activities to disk."""
     _token_utils.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(ACTIVITIES_PATH, "w") as f:
+    with open(_activities_path(), "w") as f:
         json.dump(activities, f, indent=2)
 
 
@@ -96,7 +99,7 @@ def sync(days: int = 30) -> None:
         print(f"Error: {e}")
         return
 
-    after = datetime.now(tz=timezone.utc) - timedelta(days=days)
+    after = datetime.now(tz=UTC) - timedelta(days=days)
     after_ts = int(after.timestamp())
 
     headers = {"Authorization": f"Bearer {token}"}

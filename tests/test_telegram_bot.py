@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -130,7 +130,7 @@ def test_format_weekly_summary() -> None:
 
 
 def test_today_session_found(tmp_data_dir: Path, sample_plan: dict) -> None:
-    today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(tz=UTC).strftime("%Y-%m-%d")
     sample_plan["weeks"][0]["sessions"][0]["date"] = today
 
     plan_path = tmp_data_dir / "training_plan.json"
@@ -160,7 +160,7 @@ def test_weekly_summary_with_data(
     tmp_data_dir: Path, sample_activities: list[dict]
 ) -> None:
     # Set activity dates to within last 7 days
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     sample_activities[0]["date"] = (now - timedelta(days=1)).isoformat()
     sample_activities[1]["date"] = (now - timedelta(days=2)).isoformat()
 

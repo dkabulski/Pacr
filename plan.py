@@ -10,26 +10,29 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
 import fire
 
 import _token_utils
 
-PLAN_PATH = _token_utils.DATA_DIR / "training_plan.json"
+
+def _plan_path() -> Path:
+    return _token_utils.DATA_DIR / "training_plan.json"
 
 
 def _load_plan() -> dict | None:
     """Load the current training plan from disk."""
-    if not PLAN_PATH.exists():
+    if not _plan_path().exists():
         return None
-    with open(PLAN_PATH) as f:
+    with open(_plan_path()) as f:
         return json.load(f)
 
 
 def _save_plan(plan: dict) -> None:
     """Save the training plan to disk."""
     _token_utils.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(PLAN_PATH, "w") as f:
+    with open(_plan_path(), "w") as f:
         json.dump(plan, f, indent=2)
 
 
@@ -126,8 +129,8 @@ def update(week: int) -> None:
 
 def clear() -> None:
     """Delete the current training plan."""
-    if PLAN_PATH.exists():
-        PLAN_PATH.unlink()
+    if _plan_path().exists():
+        _plan_path().unlink()
         print("Training plan deleted.")
     else:
         print("No training plan to delete.")

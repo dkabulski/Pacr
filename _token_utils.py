@@ -6,8 +6,8 @@ import json
 import os
 import stat
 import time
-import urllib.request
 import urllib.parse
+import urllib.request
 from pathlib import Path
 
 DATA_DIR = Path(__file__).parent / "data"
@@ -57,9 +57,7 @@ def get_valid_token() -> str:
     """
     tokens = read_tokens()
     if tokens is None:
-        raise RuntimeError(
-            "No tokens found. Run: uv run strava_auth.py authorize"
-        )
+        raise RuntimeError("No tokens found. Run: uv run strava_auth.py authorize")
 
     expires_at = tokens.get("expires_at", 0)
     if time.time() < expires_at - 60:
@@ -69,13 +67,9 @@ def get_valid_token() -> str:
     client_id = os.environ.get("STRAVA_CLIENT_ID", "")
     client_secret = os.environ.get("STRAVA_CLIENT_SECRET", "")
     if not client_id or not client_secret:
-        raise RuntimeError(
-            "STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET must be set"
-        )
+        raise RuntimeError("STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET must be set")
 
-    new_tokens = refresh_access_token(
-        client_id, client_secret, tokens["refresh_token"]
-    )
+    new_tokens = refresh_access_token(client_id, client_secret, tokens["refresh_token"])
     tokens.update(
         {
             "access_token": new_tokens["access_token"],

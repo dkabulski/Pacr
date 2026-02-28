@@ -7,7 +7,7 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = [
-    "ruff>=0.9",
+    "ruff>=0.15",
     "pytest>=8",
     "pytest-cov>=6",
     "mypy>=1.14",
@@ -16,7 +16,7 @@ dev = [
     "requests>=2.32",
     "python-dotenv>=1.0",
     "beautifulsoup4>=4.12",
-    "python-telegram-bot>=21.0",
+    "python-telegram-bot>=22.0",
 ]
 
 [tool.ruff]

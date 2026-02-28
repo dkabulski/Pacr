@@ -1,3 +1,8 @@
+---
+name: running-coach
+description: AI running coach — analyses Strava data, manages training plans, and tracks race results using Jack Daniels' methodology
+---
+
 # RunWhisperer Skill
 
 ## Tools
