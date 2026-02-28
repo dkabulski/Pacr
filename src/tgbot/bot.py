@@ -33,7 +33,7 @@ load_dotenv()
 STRAVA_POLL_INTERVAL = int(os.environ.get("STRAVA_POLL_INTERVAL", "1800"))
 
 # Re-export from submodules so tests can import via `tgbot.bot.*`
-from .context import (  # noqa: E402
+from tgbot.context import (  # noqa: E402
     CLAUDE_MODEL,
     _build_athlete_context,
     _calculate_vdot,
@@ -41,7 +41,7 @@ from .context import (  # noqa: E402
     _generate_plan_with_claude,
     _vdot_paces,
 )
-from .formatters import (  # noqa: E402
+from tgbot.formatters import (  # noqa: E402
     _format_activity_summary,
     _format_last_activity,
     _format_next_sessions,
