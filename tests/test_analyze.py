@@ -39,9 +39,7 @@ def test_classify_hr_zone_above(sample_zones: dict) -> None:
     assert result["in_range"] is False
 
 
-def test_no_zones_file(
-    tmp_data_dir: Path, sample_activities: list[dict]
-) -> None:
+def test_no_zones_file(tmp_data_dir: Path, sample_activities: list[dict]) -> None:
     """No zones file produces a clear flag, not a silent fallback."""
     # Write activities but no zones
     activities_path = tmp_data_dir / "activities.json"
@@ -53,7 +51,10 @@ def test_no_zones_file(
 
 
 def test_easy_run_in_zone(
-    tmp_data_dir: Path, sample_activities: list[dict], sample_zones: dict, sample_plan: dict
+    tmp_data_dir: Path,
+    sample_activities: list[dict],
+    sample_zones: dict,
+    sample_plan: dict,
 ) -> None:
     """Easy run with HR in zone 2 gets no flags about being too fast."""
     (tmp_data_dir / "activities.json").write_text(json.dumps(sample_activities))
@@ -71,7 +72,10 @@ def test_easy_run_in_zone(
 
 
 def test_easy_run_too_fast(
-    tmp_data_dir: Path, sample_activities: list[dict], sample_zones: dict, sample_plan: dict
+    tmp_data_dir: Path,
+    sample_activities: list[dict],
+    sample_zones: dict,
+    sample_plan: dict,
 ) -> None:
     """Easy run with HR in zone 4 gets flagged."""
     (tmp_data_dir / "activities.json").write_text(json.dumps(sample_activities))

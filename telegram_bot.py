@@ -17,7 +17,7 @@ import json
 import os
 import urllib.parse
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import fire
 from dotenv import load_dotenv
@@ -94,7 +94,7 @@ def _today_session() -> dict | None:
     if not p or "weeks" not in p:
         return None
 
-    today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(tz=UTC).strftime("%Y-%m-%d")
     for week in p["weeks"]:
         for session in week.get("sessions", []):
             if session.get("date") == today:
@@ -112,7 +112,7 @@ def _weekly_summary() -> dict:
     import strava_sync
 
     activities = strava_sync._load_cached()
-    cutoff = datetime.now(tz=timezone.utc) - timedelta(days=7)
+    cutoff = datetime.now(tz=UTC) - timedelta(days=7)
 
     recent: list[dict] = []
     for act in activities:
@@ -129,9 +129,7 @@ def _weekly_summary() -> dict:
     total_km = sum(a.get("distance_km", 0) for a in recent)
     total_time = sum(a.get("moving_time_s", 0) for a in recent)
     avg_pace = (
-        strava_sync.format_pace(total_km * 1000, total_time)
-        if total_km > 0
-        else "N/A"
+        strava_sync.format_pace(total_km * 1000, total_time) if total_km > 0 else "N/A"
     )
 
     return {
@@ -192,7 +190,7 @@ def _format_plan_summary(plan: dict) -> str:
     lines = ["<b>Training Plan</b>", f"Goal: {goal}", f"Weeks: {total_weeks}"]
 
     # Show current week (last week in plan, or find by date)
-    today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(tz=UTC).strftime("%Y-%m-%d")
     current_week = None
     for i, week in enumerate(weeks):
         for session in week.get("sessions", []):

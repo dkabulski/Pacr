@@ -9,17 +9,27 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import fire
 
 import _token_utils
 
-ACTIVITIES_PATH = _token_utils.DATA_DIR / "activities.json"
-ZONES_PATH = _token_utils.DATA_DIR / "athlete_zones.json"
-PLAN_PATH = _token_utils.DATA_DIR / "training_plan.json"
-LOG_PATH = _token_utils.DATA_DIR / "training_log.json"
+
+def _activities_path() -> Path:
+    return _token_utils.DATA_DIR / "activities.json"
+
+
+def _zones_path() -> Path:
+    return _token_utils.DATA_DIR / "athlete_zones.json"
+
+
+def _plan_path() -> Path:
+    return _token_utils.DATA_DIR / "training_plan.json"
+
+
+def _log_path() -> Path:
+    return _token_utils.DATA_DIR / "training_log.json"
 
 
 def _load_json(path: Path) -> dict | list | None:
@@ -34,11 +44,11 @@ def _save_log(entry: dict) -> None:
     """Append analysis entry to the training log."""
     _token_utils.DATA_DIR.mkdir(parents=True, exist_ok=True)
     log: list[dict] = []
-    if LOG_PATH.exists():
-        with open(LOG_PATH) as f:
+    if _log_path().exists():
+        with open(_log_path()) as f:
             log = json.load(f)
     log.append(entry)
-    with open(LOG_PATH, "w") as f:
+    with open(_log_path(), "w") as f:
         json.dump(log, f, indent=2)
 
 
@@ -105,8 +115,8 @@ def _find_prescribed_session(plan: dict, activity_date: str) -> dict | None:
 
 def _analyze_activity(activity: dict) -> dict:
     """Analyse a single activity against zones and plan."""
-    zones_data = _load_json(ZONES_PATH)
-    plan_data = _load_json(PLAN_PATH)
+    zones_data = _load_json(_zones_path())
+    plan_data = _load_json(_plan_path())
 
     analysis: dict = {
         "activity_id": activity["id"],
@@ -127,7 +137,11 @@ def _analyze_activity(activity: dict) -> dict:
         analysis["avg_hr"] = avg_hr
     elif avg_hr:
         analysis["avg_hr"] = avg_hr
-        analysis["hr_zone"] = {"zone": "unknown", "label": "No zones configured", "in_range": False}
+        analysis["hr_zone"] = {
+            "zone": "unknown",
+            "label": "No zones configured",
+            "in_range": False,
+        }
 
     # Pace analysis
     distance_m = activity.get("distance_m", 0)
@@ -154,7 +168,8 @@ def _analyze_activity(activity: dict) -> dict:
                     f"Easy run done in {hr_zone.get('label', zone)} — too hard"
                 )
                 analysis["recommendations"].append(
-                    "Slow down on easy days. Easy effort should feel comfortable and conversational."
+                    "Slow down on easy days. "
+                    "Easy effort should feel comfortable and conversational."
                 )
     else:
         analysis["prescribed"] = None
@@ -171,7 +186,7 @@ def _analyze_activity(activity: dict) -> dict:
 
 def latest() -> None:
     """Analyse the most recent cached activity."""
-    activities = _load_json(ACTIVITIES_PATH)
+    activities = _load_json(_activities_path())
     if not activities or not isinstance(activities, list) or len(activities) == 0:
         print("No activities cached. Run: uv run strava_sync.py sync")
         return
@@ -184,7 +199,7 @@ def latest() -> None:
 
 def activity(id: int) -> None:
     """Analyse a specific activity by ID."""
-    activities = _load_json(ACTIVITIES_PATH)
+    activities = _load_json(_activities_path())
     if not activities or not isinstance(activities, list):
         print("No activities cached. Run: uv run strava_sync.py sync")
         return

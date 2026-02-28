@@ -20,8 +20,15 @@ from bs4 import BeautifulSoup
 
 import _token_utils
 
-RESULTS_PATH = _token_utils.DATA_DIR / "race_results.json"
-RAW_HTML_PATH = _token_utils.DATA_DIR / "po10_raw.html"
+
+def _results_path() -> Path:
+    return _token_utils.DATA_DIR / "race_results.json"
+
+
+def _raw_html_path() -> Path:
+    return _token_utils.DATA_DIR / "po10_raw.html"
+
+
 BASE_URL = "https://www.thepowerof10.info/athletes/profile.aspx"
 
 
@@ -43,7 +50,8 @@ def _parse_results(html: str, verbose: bool = False) -> list[dict]:
     if table is None:
         if verbose:
             all_tables = soup.find_all("table")
-            print(f"Warning: No results table found. Page has {len(all_tables)} tables.")
+            n = len(all_tables)
+            print(f"Warning: No results table found. Page has {n} tables.")
             for i, t in enumerate(all_tables[:5]):
                 headers = [th.get_text(strip=True) for th in t.find_all("th")]
                 print(f"  Table {i}: headers={headers[:6]}")
@@ -55,7 +63,9 @@ def _parse_results(html: str, verbose: bool = False) -> list[dict]:
 
     # Get header indices
     header_row = rows[0]
-    headers = [th.get_text(strip=True).lower() for th in header_row.find_all(["th", "td"])]
+    headers = [
+        th.get_text(strip=True).lower() for th in header_row.find_all(["th", "td"])
+    ]
 
     if verbose:
         print(f"Headers found: {headers}")
@@ -105,16 +115,16 @@ def _parse_results(html: str, verbose: bool = False) -> list[dict]:
 
 def _load_results() -> list[dict]:
     """Load cached results from disk."""
-    if not RESULTS_PATH.exists():
+    if not _results_path().exists():
         return []
-    with open(RESULTS_PATH) as f:
+    with open(_results_path()) as f:
         return json.load(f)
 
 
 def _save_results(results: list[dict]) -> None:
     """Save results to disk."""
     _token_utils.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(RESULTS_PATH, "w") as f:
+    with open(_results_path(), "w") as f:
         json.dump(results, f, indent=2)
 
 
@@ -143,9 +153,9 @@ def fetch(athlete_id: int, verbose: bool = False) -> None:
 
     if verbose:
         _token_utils.DATA_DIR.mkdir(parents=True, exist_ok=True)
-        with open(RAW_HTML_PATH, "w") as f:
+        with open(_raw_html_path(), "w") as f:
             f.write(html)
-        print(f"Raw HTML saved to {RAW_HTML_PATH}")
+        print(f"Raw HTML saved to {_raw_html_path()}")
 
         soup = BeautifulSoup(html, "html.parser")
         tables = soup.find_all("table")
@@ -160,11 +170,13 @@ def fetch(athlete_id: int, verbose: bool = False) -> None:
 
     if not results:
         print("No results found. The page structure may have changed.")
-        print("Use --verbose to inspect the HTML, or use 'pot10.py add' for manual entry.")
+        print(
+            "Use --verbose to inspect the HTML, or use 'pot10.py add' for manual entry."
+        )
         return
 
     _save_results(results)
-    print(f"Saved {len(results)} results to {RESULTS_PATH}")
+    print(f"Saved {len(results)} results to {_results_path()}")
 
     for r in results[:10]:
         date = r.get("date", "?")

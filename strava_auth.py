@@ -32,7 +32,7 @@ _server_ready = threading.Event()
 class _CallbackHandler(BaseHTTPRequestHandler):
     """Handle the OAuth callback from Strava."""
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         global _auth_code
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
@@ -51,9 +51,7 @@ class _CallbackHandler(BaseHTTPRequestHandler):
             self.send_response(400)
             self.send_header("Content-Type", "text/html")
             self.end_headers()
-            self.wfile.write(
-                f"<h1>Authorisation failed: {error}</h1>".encode()
-            )
+            self.wfile.write(f"<h1>Authorisation failed: {error}</h1>".encode())
 
     def log_message(self, format: str, *args: object) -> None:
         """Suppress default request logging."""

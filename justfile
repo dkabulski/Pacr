@@ -22,7 +22,7 @@ fmt:
 
 # Type check
 typecheck:
-    uv run mypy _token_utils.py analyze.py plan.py telegram_bot.py
+    uv run mypy _token_utils.py strava_auth.py strava_sync.py pot10.py analyze.py plan.py telegram_bot.py
 
 # Run tests
 test *ARGS:
