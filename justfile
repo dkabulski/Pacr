@@ -90,12 +90,6 @@ tg-bot:
 briefing:
     uv run src/tgbot/bot.py morning_briefing
 
-# Deploy skill to OpenClaw
-deploy:
-    @mkdir -p ~/.openclaw/workspace/skills
-    @ln -sfn "$(pwd)" ~/.openclaw/workspace/skills/running-coach
-    @echo "Deployed to ~/.openclaw/workspace/skills/running-coach"
-
 # Docker commands
 docker-build:
     docker compose -f docker/docker-compose.yml build

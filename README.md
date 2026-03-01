@@ -2,11 +2,11 @@
 
 ![Élan](assets/elan-beetroot-v4.svg)
 
-AI running coach built as an [OpenClaw](https://openclaw.dev) skill. Uses Claude to analyse Strava data, look up race results, and manage training plans following Jack Daniels' Running Formula methodology.
+AI running coach powered by Claude. Analyses Strava data, looks up race results, and manages training plans following Jack Daniels' Running Formula methodology.
 
 ## Overview
 
-The agent (Claude) reads `SKILL.md` to discover available tools, then calls Python scripts via `uv run` to pull data and manage training. All data persists as JSON in `data/`. The interactive Telegram bot provides a conversational coaching interface with automatic Strava syncing every 30 minutes.
+Claude calls Python scripts via `uv run` to pull data and manage training. All data persists as JSON in `data/`. The interactive Telegram bot provides a conversational coaching interface with automatic Strava syncing every 30 minutes.
 
 ## Quick Start
 
@@ -116,14 +116,12 @@ just sync        # fetch Strava activities (last 365 days)
 just plan        # show current training plan
 just auth        # Strava OAuth authorisation
 just auth-status # check Strava token validity
-just deploy      # symlink to OpenClaw skills dir
 ```
 
 ## Project Structure
 
 ```
 RunWhisperer/
-├── SKILL.md                     # OpenClaw tool catalog
 ├── CLAUDE.md                    # AI agent project context
 ├── src/
 │   ├── _token_utils.py          # Shared token management (stdlib only)
@@ -145,8 +143,7 @@ RunWhisperer/
 ├── config/
 │   ├── SOUL.md                  # Coaching personality
 │   ├── AGENTS.md                # Agent behaviour rules
-│   ├── athlete-profile.md       # Athlete intake template
-│   └── openclaw.json.example
+│   └── athlete-profile.md       # Athlete intake template
 ├── docker/
 │   ├── Dockerfile.skills
 │   └── docker-compose.yml
