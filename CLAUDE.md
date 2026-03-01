@@ -11,6 +11,9 @@
 - `src/plan.py` — manage training plan JSON via stdin
 - `src/tgbot/formatters.py` — HTML formatters and data helpers for Telegram messages
 - `src/tgbot/context.py` — athlete context building, VDOT helpers, Claude plan generation
+- `src/training_load.py` — CTL/ATL/TSB training load metrics
+- `src/tgbot/debrief.py` — post-run RPE parsing and debrief storage
+- `src/tgbot/km_query.py` — local km/distance query answering (no API calls)
 - `src/tgbot/bot.py` — Telegram CLI entry point (send + interactive bot)
 - `config/` — OpenClaw personality, agent behaviour, athlete profile template
 - `data/` — runtime data (gitignored): tokens, activities, plans, results
@@ -55,5 +58,6 @@ just docker-down   # stop containers
 | `data/race_results.json` | Power of 10 + manual race results |
 | `data/training_plan.json` | Current training plan |
 | `data/athlete_zones.json` | HR and pace zones |
-| `data/training_log.json` | Analyzed session log |
+| `data/training_log.json` | Analysed session log |
+| `data/debriefs.json` | Post-run RPE debriefs |
 | `data/conversation_history.json` | Telegram chat history (persisted across restarts) |

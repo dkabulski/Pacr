@@ -11,6 +11,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import time as _time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -21,6 +23,44 @@ from dotenv import load_dotenv
 import _token_utils
 
 load_dotenv()
+
+logger = logging.getLogger("runwhisperer")
+
+_RETRYABLE = {500, 502, 503, 504}
+_MAX_RETRIES = 3
+
+
+def _strava_get(
+    url: str,
+    headers: dict,
+    params: dict | None = None,
+    timeout: int = 30,
+) -> requests.Response:
+    """GET with exponential backoff for transient Strava errors."""
+    for attempt in range(_MAX_RETRIES):
+        try:
+            resp = requests.get(
+                url, headers=headers, params=params, timeout=timeout
+            )
+        except requests.exceptions.Timeout:
+            if attempt == _MAX_RETRIES - 1:
+                raise
+            _time.sleep(2 ** attempt)
+            continue
+        if resp.status_code in _RETRYABLE:
+            if attempt == _MAX_RETRIES - 1:
+                msg = f"Strava API error after retries: HTTP {resp.status_code}"
+                raise RuntimeError(msg)
+            logger.warning(
+                "Strava HTTP %d, retry %d/%d",
+                resp.status_code,
+                attempt + 1,
+                _MAX_RETRIES,
+            )
+            _time.sleep(2 ** attempt)
+            continue
+        return resp
+    raise RuntimeError("Strava request failed")
 
 
 def _activities_path() -> Path:
@@ -63,6 +103,7 @@ def normalize_activity(raw: dict) -> dict:
         "avg_cadence": raw.get("average_cadence"),
         "suffer_score": raw.get("suffer_score"),
         "calories": raw.get("calories"),
+        "description": raw.get("description", "") or "",
     }
 
 
@@ -72,6 +113,24 @@ def _load_cached() -> list[dict]:
         return []
     with open(_activities_path()) as f:
         return json.load(f)
+
+
+def _fetch_description(activity_id: int) -> str:
+    """Fetch the description of a single activity.
+
+    The list API returns SummaryActivity which omits description; this calls
+    GET /activities/{id} (DetailedActivity) to retrieve it.
+    Returns an empty string if unavailable or on error.
+    """
+    token = _token_utils.get_valid_token()
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = _strava_get(
+        f"https://www.strava.com/api/v3/activities/{activity_id}",
+        headers=headers,
+    )
+    if resp.status_code != 200:
+        return ""
+    return resp.json().get("description", "") or ""
 
 
 def _save_cached(activities: list[dict]) -> None:
@@ -103,16 +162,15 @@ def sync(days: int = 365) -> None:
     page = 1
 
     while True:
-        print(f"Fetching page {page}...")
-        resp = requests.get(
+        logger.info("Fetching Strava page %d…", page)
+        resp = _strava_get(
             "https://www.strava.com/api/v3/athlete/activities",
             headers=headers,
             params={"after": after_ts, "per_page": PER_PAGE, "page": page},
-            timeout=30,
         )
 
         if resp.status_code == 401:
-            print("Token expired, refreshing...")
+            logger.warning("Strava token expired, refreshing…")
             token = _token_utils.get_valid_token()
             headers = {"Authorization": f"Bearer {token}"}
             continue
@@ -137,7 +195,7 @@ def sync(days: int = 365) -> None:
     existing = _load_cached()
     merged = _merge(existing, normalised)
     _save_cached(merged)
-    print(f"Synced {len(normalised)} activities ({len(merged)} total cached)")
+    logger.info("Synced %d activities (%d total cached)", len(normalised), len(merged))
 
 
 def show(id: int | None = None, last: int = 10) -> None:
@@ -165,4 +223,26 @@ def show(id: int | None = None, last: int = 10) -> None:
 
 
 if __name__ == "__main__":
+    import os as _os
+
+    if _os.environ.get("LOG_FORMAT") == "json":
+        class _JsonFormatter(logging.Formatter):
+            def format(self, record: logging.LogRecord) -> str:
+                return json.dumps({
+                    "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+                    "level": record.levelname,
+                    "logger": record.name,
+                    "msg": record.getMessage(),
+                })
+
+        _handler = logging.StreamHandler()
+        _handler.setFormatter(_JsonFormatter())
+        logging.root.addHandler(_handler)
+        logging.root.setLevel(logging.INFO)
+    else:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
     fire.Fire({"sync": sync, "show": show})

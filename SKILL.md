@@ -105,7 +105,7 @@ Send a daily summary (latest activity). Use `--period=weekly` for a 7-day overvi
 ```bash
 uv run {baseDir}/src/tgbot/bot.py bot
 ```
-Start the interactive Telegram bot (long-polling). The athlete can then use `/start`, `/sync`, `/plan`, `/today`, `/analyze`, `/results`, and `/help` directly from Telegram.
+Start the interactive Telegram bot (long-polling). The athlete can then use `/start`, `/sync`, `/plan`, `/today`, `/analyse`, `/results`, and `/help` directly from Telegram.
 
 ## Coaching Methodology
 

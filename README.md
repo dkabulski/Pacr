@@ -64,7 +64,7 @@ curl "https://api.telegram.org/bot<TOKEN>/getUpdates" | jq '.result[0].message.c
 | `/summary` | Last 7 days: distance, time, pace | `/summary` |
 | `/plan` | Training plan overview | `/plan` |
 | `/setplan <goal>` | Generate a new plan with AI | `/setplan half marathon on April 3 2026 in 1:21h` |
-| `/analyze` | Analyse latest activity against plan & zones | `/analyze` |
+| `/analyse` | Analyse last activity: flags, coaching opinion & debrief | `/analyse` |
 | `/results` | Cached race results | `/results` |
 | `/zones` | HR and pace training zones | `/zones` |
 | `/clear` | Clear conversation history | `/clear` |

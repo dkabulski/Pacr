@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+logger = logging.getLogger("runwhisperer")
 
 from .formatters import _today_session
 
@@ -340,7 +343,15 @@ def _build_athlete_context() -> str:
             for zone, pace in paces.items():
                 lines.append(f"  {zone}: {pace}")
 
+    _MAX_CONTEXT_CHARS = 400_000  # ~100K tokens, leaves room for conversation
+
     result = "\n".join(lines)
+    if len(result) > _MAX_CONTEXT_CHARS:
+        logger.warning("System prompt too large (%d chars), trimming", len(result))
+        result = (
+            result[:_MAX_CONTEXT_CHARS]
+            + "\n(… context truncated to fit token limit)"
+        )
     _context_cache["text"] = result
     _context_cache["ts"] = datetime.now(tz=UTC).timestamp()
     return result

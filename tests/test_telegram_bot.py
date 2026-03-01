@@ -204,6 +204,37 @@ def test_send_calls_telegram_api(monkeypatch: pytest.MonkeyPatch) -> None:
         mock_send.assert_called_once_with("Hello!")
 
 
+# ---------------------------------------------------------------------------
+# Path validation tests
+# ---------------------------------------------------------------------------
+
+
+def test_validate_data_path_traversal(tmp_data_dir: Path) -> None:
+    import tgbot.bot as bot_mod
+
+    assert bot_mod._validate_data_path("../../.env") is None
+
+
+def test_validate_data_path_blocked(tmp_data_dir: Path) -> None:
+    import tgbot.bot as bot_mod
+
+    assert bot_mod._validate_data_path("tokens.json") is None
+
+
+def test_validate_data_path_valid(tmp_data_dir: Path) -> None:
+    import tgbot.bot as bot_mod
+
+    (tmp_data_dir / "activities.json").write_text("[]")
+    result = bot_mod._validate_data_path("activities.json")
+    assert result is not None
+    assert result.name == "activities.json"
+
+
+# ---------------------------------------------------------------------------
+# Send tests (continued)
+# ---------------------------------------------------------------------------
+
+
 def test_send_truncates_long_message(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify message is truncated at 4096 chars."""
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "fake-token")

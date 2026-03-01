@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from calendar import monthrange
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 MONTH_NAMES: dict[str, int] = {
     "january": 1,
@@ -72,7 +72,7 @@ def parse_period(text: str) -> tuple[date, date] | None:
     period is not recognised.
     """
     t = text.lower()
-    today = date.today()
+    today = datetime.now(tz=UTC).date()
     y, m = today.year, today.month
 
     if "last year" in t:
@@ -203,7 +203,7 @@ def compute_km(
 
 def describe_period(start: date, end: date) -> str:
     """Return a human-readable label for a (start, end) date range."""
-    today = date.today()
+    today = datetime.now(tz=UTC).date()
     y = today.year
 
     # All time
