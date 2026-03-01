@@ -22,7 +22,7 @@ fmt:
 
 # Type check
 typecheck:
-    uv run mypy src/_token_utils.py src/strava_auth.py src/strava_sync.py src/pot10.py src/analyze.py src/plan.py src/training_load.py src/tgbot/debrief.py src/tgbot/formatters.py src/tgbot/context.py src/tgbot/bot.py
+    uv run mypy src/_token_utils.py src/strava_auth.py src/strava_sync.py src/pot10.py src/analyze.py src/plan.py src/training_load.py src/tgbot/debrief.py src/tgbot/formatters.py src/tgbot/context.py src/tgbot/handlers.py src/tgbot/claude_chat.py src/tgbot/km_query.py src/tgbot/bot.py
 
 # Run tests
 test *ARGS:
@@ -65,6 +65,18 @@ zones MAXHR='190':
     pathlib.Path("data").mkdir(exist_ok=True)
     pathlib.Path("data/athlete_zones.json").write_text(json.dumps(zones, indent=2))
     print(json.dumps(zones, indent=2))
+
+# Strava OAuth authorisation (opens browser)
+auth:
+    uv run src/strava_auth.py authorize
+
+# Check Strava token validity
+auth-status:
+    uv run src/strava_auth.py status
+
+# Install ruff pre-commit hooks
+pre-commit:
+    uvx pre-commit install
 
 # Send a test message to Telegram
 tg-send TEXT="Test from RunWhisperer":

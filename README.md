@@ -35,7 +35,10 @@ cp .env.example .env
 # 4. Authorise with Strava (opens browser)
 uv run src/strava_auth.py authorize
 
-# 5. Start the interactive bot
+# 5. Set your HR zones (replace 190 with your max HR)
+just zones 190
+
+# 6. Start the interactive bot
 just tg-bot
 
 # — or — run in Docker
@@ -66,6 +69,8 @@ curl "https://api.telegram.org/bot<TOKEN>/getUpdates" | jq '.result[0].message.c
 | `/setplan <goal>` | Generate a new plan with AI | `/setplan half marathon on April 3 2026 in 1:21h` |
 | `/analyse` | Analyse last activity: flags, coaching opinion & debrief | `/analyse` |
 | `/results` | Cached race results | `/results` |
+| `/load` | Training load: CTL/ATL/TSB + weekly km | `/load` |
+| `/reanalyse` | Re-analyse last activity on demand | `/reanalyse` |
 | `/zones` | HR and pace training zones | `/zones` |
 | `/clear` | Clear conversation history | `/clear` |
 | `/help` | Show all commands | `/help` |
@@ -74,7 +79,7 @@ You can also send free-text messages to chat directly with your AI coach.
 
 ### Automatic Strava sync
 
-The bot polls Strava every 30 minutes (configurable via `STRAVA_POLL_INTERVAL` in `.env`). When a new activity is detected it is automatically analysed and a coaching note is sent to the chat.
+The bot polls Strava every 30 minutes (configurable via `STRAVA_POLL_INTERVAL` in `.env`). When a new activity is detected it is automatically analysed and a coaching note is sent to the chat. The delay before auto-analysis is controlled by `STRAVA_ANALYSIS_DELAY` (default: 600s / 10 min). Set `LOG_FORMAT=json` for structured JSON log output.
 
 ## Docker
 
@@ -106,8 +111,11 @@ just fmt         # ruff format
 just typecheck   # mypy
 just test        # pytest
 just test-cov    # pytest with coverage
+just pre-commit  # install ruff pre-commit hooks
 just sync        # fetch Strava activities (last 365 days)
 just plan        # show current training plan
+just auth        # Strava OAuth authorisation
+just auth-status # check Strava token validity
 just deploy      # symlink to OpenClaw skills dir
 ```
 
@@ -120,15 +128,20 @@ RunWhisperer/
 ├── src/
 │   ├── _token_utils.py          # Shared token management (stdlib only)
 │   ├── strava_auth.py           # OAuth setup
-│   ├── strava_sync.py           # Activity sync + cache
+│   ├── strava_sync.py           # Activity sync + cache (retry/backoff)
 │   ├── pot10.py                 # Power of 10 results [EXPERIMENTAL]
 │   ├── plan.py                  # Training plan management
 │   ├── analyze.py               # Session analysis
+│   ├── training_load.py         # CTL/ATL/TSB training load metrics
 │   └── tgbot/
 │       ├── __init__.py
-│       ├── bot.py               # Telegram CLI entry point
+│       ├── bot.py               # Thin entry point + fire CLI
+│       ├── handlers.py          # Command handlers + BotConfig state
+│       ├── claude_chat.py       # Claude tool defs + orchestration
 │       ├── formatters.py        # HTML formatters and data helpers
-│       └── context.py           # Athlete context + VDOT helpers
+│       ├── context.py           # Athlete context + VDOT helpers
+│       ├── debrief.py           # Post-run RPE debrief storage
+│       └── km_query.py          # Local km/distance queries (no API)
 ├── config/
 │   ├── SOUL.md                  # Coaching personality
 │   ├── AGENTS.md                # Agent behaviour rules
@@ -154,6 +167,7 @@ All stored in `data/` (gitignored):
 | `training_plan.json` | Current training plan |
 | `athlete_zones.json` | HR and pace zones |
 | `training_log.json` | Analysed session history |
+| `debriefs.json` | Post-run RPE debriefs |
 | `conversation_history.json` | Telegram chat history |
 
 ## Race Results — Power of 10
