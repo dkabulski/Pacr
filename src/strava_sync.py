@@ -24,7 +24,7 @@ import _token_utils
 
 load_dotenv()
 
-logger = logging.getLogger("runwhisperer")
+logger = logging.getLogger("pacr")
 
 _RETRYABLE = {500, 502, 503, 504}
 _MAX_RETRIES = 3

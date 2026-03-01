@@ -1,4 +1,4 @@
-# RunWhisperer — OpenClaw Skill
+# Pacr
 
 ## Project Layout
 

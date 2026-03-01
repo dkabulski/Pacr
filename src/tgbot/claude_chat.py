@@ -11,7 +11,7 @@ from tgbot.handlers import (
     _validate_data_path,
 )
 
-logger = logging.getLogger("runwhisperer")
+logger = logging.getLogger("pacr")
 
 TOOLS = [
     {

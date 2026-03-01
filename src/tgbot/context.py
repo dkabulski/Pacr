@@ -10,7 +10,7 @@ import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-logger = logging.getLogger("runwhisperer")
+logger = logging.getLogger("pacr")
 
 from .formatters import _today_session
 

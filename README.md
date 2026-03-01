@@ -1,6 +1,6 @@
-# RunWhisperer
+# Pacr
 
-![Élan](assets/elan-beetroot-v4.svg)
+![Élan](assets/pacr-logo.svg)
 
 AI running coach powered by Claude. Analyses Strava data, looks up race results, and manages training plans following Jack Daniels' Running Formula methodology.
 
@@ -22,8 +22,8 @@ Claude calls Python scripts via `uv run` to pull data and manage training. All d
 
 ```bash
 # 1. Clone the repository
-git clone <repo-url> RunWhisperer
-cd RunWhisperer
+git clone <repo-url> Pacr
+cd Pacr
 
 # 2. Install dev dependencies
 just setup
@@ -121,7 +121,7 @@ just auth-status # check Strava token validity
 ## Project Structure
 
 ```
-RunWhisperer/
+Pacr/
 ├── CLAUDE.md                    # AI agent project context
 ├── src/
 │   ├── _token_utils.py          # Shared token management (stdlib only)

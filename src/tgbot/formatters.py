@@ -364,7 +364,7 @@ def _format_status() -> str:
     """Brief status: last sync, plan exists, today's session."""
     import strava_sync
 
-    lines = ["<b>RunWhisperer Status</b>"]
+    lines = ["<b>Pacr Status</b>"]
 
     activities = strava_sync._load_cached()
     if activities:

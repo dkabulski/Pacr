@@ -39,7 +39,7 @@ from tgbot.km_query import (
     sport_label,
 )
 
-logger = logging.getLogger("runwhisperer")
+logger = logging.getLogger("pacr")
 
 _MAX_HISTORY = 20  # individual messages (~10 conversational turns)
 _BLOCKED_FILES = {"tokens.json"}  # never exposed to the model
@@ -346,7 +346,7 @@ async def cmd_start(update: object, context: object) -> None:
     logger.info("/start")
     status = await asyncio.to_thread(_format_status)
     await update.message.reply_text(  # type: ignore[union-attr]
-        f"Hello! I'm RunWhisperer, your running coach.\n\n{status}",
+        f"Hello! I'm Pacr, your running coach.\n\n{status}",
         parse_mode="HTML",
     )
 

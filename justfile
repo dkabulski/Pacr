@@ -1,4 +1,4 @@
-# RunWhisperer — development commands
+# Pacr — development commands
 
 # Default recipe
 default:
@@ -79,7 +79,7 @@ pre-commit:
     uvx pre-commit install
 
 # Send a test message to Telegram
-tg-send TEXT="Test from RunWhisperer":
+tg-send TEXT="Test from Pacr":
     uv run src/tgbot/bot.py send --text="{{TEXT}}"
 
 # Start interactive Telegram bot

@@ -1,7 +1,7 @@
 [project]
 name = "running-coach"
 version = "0.1.0"
-description = "RunWhisperer — AI running coach OpenClaw skill backed by Strava + Power of 10"
+description = "Pacr — AI running coach backed by Strava + Power of 10"
 requires-python = ">=3.12"
 dependencies = []
 

@@ -20,4 +20,4 @@ RUN uv run --script src/tgbot/bot.py --help > /dev/null 2>&1 || true
 # Data directory (mount as volume)
 RUN mkdir -p /skill/data
 
-CMD ["echo", "RunWhisperer skill ready. Use uv run src/<script>.py <command>."]
+CMD ["echo", "Pacr skill ready. Use uv run src/<script>.py <command>."]
