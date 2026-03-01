@@ -33,17 +33,36 @@ MONTH_NAMES: dict[str, int] = {
     "dec": 12,
 }
 
+# Activity-type sets (Strava type / sport_type values)
+_RUN_TYPES: set[str] = {"Run", "TrailRun", "VirtualRun"}
+_CYCLE_TYPES: set[str] = {"Ride", "VirtualRide", "EBikeRide", "MountainBikeRide"}
+_HIKE_TYPES: set[str] = {"Hike"}
+_SWIM_TYPES: set[str] = {"Swim"}
+_WALK_TYPES: set[str] = {"Walk"}
+
+# Distance / sport words that signal a km query
 _DISTANCE_RE = re.compile(
-    r"\b(?:km|kilometers?|kilometres?|distance|far|ran|run|jog|miles?)\b",
+    r"\b(?:km|kilometers?|kilometres?|distance|far|miles?"
+    r"|ran|run(?:ning)?|jog(?:ging)?"
+    r"|cycled?|cycling|biked?|biking|rode"
+    r"|hiked?|hiking"
+    r"|swam|swim(?:ming)?"
+    r"|walk(?:ed)?|walking)\b",
     re.IGNORECASE,
 )
 
 _MONTH_NAMES_PATTERN = "|".join(re.escape(k) for k in MONTH_NAMES)
 _PERIOD_RE = re.compile(
-    rf"(?:\b(?:year|month|week|ever|{_MONTH_NAMES_PATTERN}|20\d{{2}})\b)"
+    rf"(?:\b(?:year|month|week|ever|lifetime|{_MONTH_NAMES_PATTERN}|20\d{{2}})\b)"
     r"|(?:all[\s\-]?time)",
     re.IGNORECASE,
 )
+
+# Sport detection patterns
+_CYCLE_RE = re.compile(r"\b(?:cycled?|cycling|biked?|biking|rode)\b", re.IGNORECASE)
+_HIKE_RE = re.compile(r"\b(?:hiked?|hiking)\b", re.IGNORECASE)
+_SWIM_RE = re.compile(r"\b(?:swam|swim(?:ming)?)\b", re.IGNORECASE)
+_WALK_RE = re.compile(r"\b(?:walk(?:ed)?|walking)\b", re.IGNORECASE)
 
 
 def parse_period(text: str) -> tuple[date, date] | None:
@@ -82,7 +101,7 @@ def parse_period(text: str) -> tuple[date, date] | None:
         this_monday = today - timedelta(days=today.weekday())
         return this_monday, today
 
-    if re.search(r"\ball\s*time\b", t) or re.search(r"\bever\b", t):
+    if re.search(r"\ball\s*time\b", t) or re.search(r"\bever\b", t) or "lifetime" in t:
         return date(2000, 1, 1), today
 
     # Named month, optionally followed by a year: "January 2025" or "January"
@@ -119,32 +138,67 @@ def parse_period(text: str) -> tuple[date, date] | None:
 
 
 def is_km_query(text: str) -> bool:
-    """Return True iff text contains both a distance word and a period word."""
+    """Return True iff text contains both a distance/sport word and a period word."""
     return bool(_DISTANCE_RE.search(text)) and bool(_PERIOD_RE.search(text))
 
 
-_RUN_TYPES = {"Run", "TrailRun", "VirtualRun"}
+def parse_sport(text: str) -> set[str]:
+    """Return the set of Strava activity types implied by the text.
+
+    Checks cycling → hiking → swimming → walking in that order.
+    Defaults to running types if no sport-specific word is found.
+    """
+    if _CYCLE_RE.search(text):
+        return _CYCLE_TYPES
+    if _HIKE_RE.search(text):
+        return _HIKE_TYPES
+    if _SWIM_RE.search(text):
+        return _SWIM_TYPES
+    if _WALK_RE.search(text):
+        return _WALK_TYPES
+    return _RUN_TYPES
 
 
-def _is_run(act: dict) -> bool:
-    """Return True if the activity is a running activity."""
-    return act.get("type") in _RUN_TYPES or act.get("sport_type") in _RUN_TYPES
+def sport_label(types: set[str]) -> str:
+    """Return the singular activity word for a set of Strava types."""
+    if types <= _RUN_TYPES:
+        return "run"
+    if types <= _CYCLE_TYPES:
+        return "ride"
+    if types <= _HIKE_TYPES:
+        return "hike"
+    if types <= _SWIM_TYPES:
+        return "swim"
+    if types <= _WALK_TYPES:
+        return "walk"
+    return "activity"
 
 
-def compute_km(activities: list[dict], start: date, end: date) -> dict:
-    """Sum distance_km for Run activities within [start, end] inclusive."""
+def compute_km(
+    activities: list[dict],
+    start: date,
+    end: date,
+    types: set[str] | None = None,
+) -> dict:
+    """Sum distance_km for activities of given types within [start, end] inclusive.
+
+    types defaults to running types when not provided.
+    Returns {"total_km": float, "count": int}.
+    """
+    if types is None:
+        types = _RUN_TYPES
     start_str = start.isoformat()
     end_str = end.isoformat()
     total_km = 0.0
-    runs = 0
+    count = 0
     for act in activities:
-        if not _is_run(act):
+        if act.get("type") not in types and act.get("sport_type") not in types:
             continue
         act_date = act.get("date", "")[:10]
         if start_str <= act_date <= end_str:
             total_km += act.get("distance_km", 0.0)
-            runs += 1
-    return {"total_km": total_km, "runs": runs}
+            count += 1
+    return {"total_km": total_km, "count": count}
 
 
 def describe_period(start: date, end: date) -> str:

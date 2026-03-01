@@ -221,10 +221,9 @@ def _build_athlete_context() -> str:
         desc = session.get("description", "")
         lines.append(f"\nToday's prescribed session: {stype} — {desc}.")
 
-    # Activities: individual detail for last 4 weeks, weekly summaries beyond that
+    # Activities: individual detail for last 4 weeks, weekly summaries for all older history
     if activities:
         cutoff_recent = datetime.now(tz=UTC) - timedelta(days=28)
-        cutoff_history = datetime.now(tz=UTC) - timedelta(days=365)
 
         recent_acts: list[tuple] = []
         older_acts: list[tuple] = []
@@ -236,8 +235,19 @@ def _build_athlete_context() -> str:
                 continue
             if dt >= cutoff_recent:
                 recent_acts.append((dt, act))
-            elif dt >= cutoff_history:
+            else:
                 older_acts.append((dt, act))
+
+        # Tell Claude the full extent of available data
+        all_dates = [dt for dt, _ in recent_acts + older_acts]
+        if all_dates:
+            earliest = min(all_dates).strftime("%Y-%m-%d")
+            lines.append(
+                f"\nActivity history spans {earliest} to today "
+                f"({len(activities)} total). "
+                "Use the lookup_activities tool for individual session detail "
+                "beyond the last 4 weeks."
+            )
 
         if recent_acts:
             from .debrief import load_debriefs
@@ -265,8 +275,13 @@ def _build_athlete_context() -> str:
                 iso = dt.isocalendar()
                 weeks_by_iso.setdefault((iso.year, iso.week), []).append((dt, act))
 
-            lines.append("\nWeekly summaries (older history):")
-            for (year, week) in sorted(weeks_by_iso.keys(), reverse=True):
+            _MAX_SUMMARY_WEEKS = 104  # 2 years — keeps system prompt bounded
+            all_weeks = sorted(weeks_by_iso.keys(), reverse=True)
+            display_weeks = all_weeks[:_MAX_SUMMARY_WEEKS]
+            omitted = len(all_weeks) - len(display_weeks)
+
+            lines.append("\nWeekly summaries (last 2 years):")
+            for (year, week) in display_weeks:
                 week_acts = [a for _, a in weeks_by_iso[(year, week)]]
                 total_km = sum(a.get("distance_km", 0) for a in week_acts)
                 total_s = sum(a.get("moving_time_s", 0) for a in week_acts)
@@ -278,6 +293,10 @@ def _build_athlete_context() -> str:
                 lines.append(
                     f"  {year}-W{week:02d} ({week_start}–{week_end}): {len(week_acts)} runs, "
                     f"{total_km:.1f} km, avg pace {pace_str}/km{hr_str}."
+                )
+            if omitted:
+                lines.append(
+                    f"  ({omitted} older weeks not shown — use lookup_activities to search further back)"
                 )
     else:
         lines.append("\nNo recent activities cached.")

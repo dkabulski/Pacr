@@ -30,7 +30,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-STRAVA_POLL_INTERVAL = int(os.environ.get("STRAVA_POLL_INTERVAL", "1800"))
+STRAVA_POLL_INTERVAL = int(os.environ.get("STRAVA_POLL_INTERVAL", "180"))
+STRAVA_ANALYSIS_DELAY = int(os.environ.get("STRAVA_ANALYSIS_DELAY", "600"))  # 10 min
 
 # Re-export from submodules so tests can import via `tgbot.bot.*`
 from tgbot.context import (  # noqa: E402
@@ -42,7 +43,14 @@ from tgbot.context import (  # noqa: E402
     _vdot_paces,
 )
 from tgbot.debrief import parse_rpe, save_debrief  # noqa: E402
-from tgbot.km_query import compute_km, describe_period, is_km_query, parse_period  # noqa: E402
+from tgbot.km_query import (  # noqa: E402
+    compute_km,
+    describe_period,
+    is_km_query,
+    parse_period,
+    parse_sport,
+    sport_label,
+)
 from tgbot.formatters import (  # noqa: E402
     _format_activity_summary,
     _format_last_activity,
@@ -235,28 +243,66 @@ def bot() -> None:
     async def _heartbeat(context: ContextTypes.DEFAULT_TYPE) -> None:
         import strava_sync
         before_ids = {a["id"] for a in await asyncio.to_thread(strava_sync._load_cached)}
-        await asyncio.to_thread(strava_sync.sync, 365)
+        # Only fetch recent days — no need to pull full history on every tick
+        await asyncio.to_thread(strava_sync.sync, 3)
         after = await asyncio.to_thread(strava_sync._load_cached)
         new_acts = [a for a in after if a["id"] not in before_ids]
-        note = await asyncio.to_thread(_auto_analyze_new_activities, before_ids)
-        if note:
+        if new_acts:
+            # Acknowledge immediately but defer analysis so the user has time to
+            # edit the title, description, gear etc. in Strava before we analyse.
+            names = ", ".join(a.get("name", "activity") for a in new_acts)
+            delay_min = STRAVA_ANALYSIS_DELAY // 60
             await context.bot.send_message(
                 chat_id=chat_id,
-                text=f"<b>New activity detected:</b>\n\n{note}",
+                text=f"<b>New activity detected:</b> {names}.\n"
+                     f"I'll analyse it in {delay_min} min — edit away in Strava first.",
                 parse_mode="HTML",
             )
-            if new_acts:
-                act = new_acts[0]
-                _pending_debriefs[int(chat_id)] = {
-                    "activity_id": act["id"],
-                    "activity_name": act.get("name", "Run"),
-                    "activity_date": act.get("date", "")[:10],
-                }
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text="How did that feel? Reply with RPE 1–10 … or <code>skip</code>.",
-                    parse_mode="HTML",
-                )
+            context.job_queue.run_once(
+                _deferred_analysis,
+                when=STRAVA_ANALYSIS_DELAY,
+                data={"new_act_ids": [a["id"] for a in new_acts]},
+                name=f"deferred_{new_acts[0]['id']}",
+            )
+
+    async def _deferred_analysis(context: ContextTypes.DEFAULT_TYPE) -> None:
+        import analyze
+        import strava_sync
+        new_act_ids: set[int] = set(context.job.data["new_act_ids"])  # type: ignore[union-attr]
+        # Re-sync to pick up any title / description edits made since detection
+        await asyncio.to_thread(strava_sync.sync, 7)
+        activities = await asyncio.to_thread(strava_sync._load_cached)
+        new_acts = [a for a in activities if a["id"] in new_act_ids]
+        if not new_acts:
+            return
+        notes: list[str] = []
+        for act in new_acts:
+            result = await asyncio.to_thread(analyze._analyze_activity, act)
+            flags = result.get("flags", [])
+            dist = act.get("distance_km", 0)
+            pace = act.get("pace", "N/A")
+            name = act.get("name", "Run")
+            header = f"{name} — {dist:.1f}km @ {pace}/km"
+            if flags:
+                notes.append(header + "\n" + "\n".join(f"  ⚠ {f}" for f in flags))
+            else:
+                notes.append(f"{header} — on target.")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="<b>Activity analysis:</b>\n\n" + "\n\n".join(notes),
+            parse_mode="HTML",
+        )
+        act = new_acts[0]
+        _pending_debriefs[int(chat_id)] = {
+            "activity_id": act["id"],
+            "activity_name": act.get("name", "Run"),
+            "activity_date": act.get("date", "")[:10],
+        }
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="How did that feel? Reply with RPE 1–10 … or <code>skip</code>.",
+            parse_mode="HTML",
+        )
 
     async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         status = await asyncio.to_thread(_format_status)
@@ -479,12 +525,14 @@ def bot() -> None:
                 import strava_sync
 
                 start, end = period
+                types = parse_sport(user_text)
                 activities = await asyncio.to_thread(strava_sync._load_cached)
-                result = await asyncio.to_thread(compute_km, activities, start, end)
+                result = await asyncio.to_thread(compute_km, activities, start, end, types)
                 label = describe_period(start, end)
-                km, runs = result["total_km"], result["runs"]
-                s = "s" if runs != 1 else ""
-                reply = f"You logged <b>{km:.1f} km</b> across <b>{runs} run{s}</b> {label}."
+                km, count = result["total_km"], result["count"]
+                word = sport_label(types)
+                s = "s" if count != 1 else ""
+                reply = f"You logged <b>{km:.1f} km</b> across <b>{count} {word}{s}</b> {label}."
                 await update.message.reply_text(reply, parse_mode="HTML")
                 return
         # (falls through to Claude if period not recognised)

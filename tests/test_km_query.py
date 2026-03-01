@@ -225,7 +225,7 @@ def test_compute_km_filters_by_range() -> None:
 
     result = compute_km(_SAMPLE_ACTIVITIES, date(2025, 1, 1), date(2025, 1, 31))
     assert result["total_km"] == 25.5
-    assert result["runs"] == 2
+    assert result["count"] == 2
 
 
 def test_compute_km_excludes_outside_range() -> None:
@@ -233,7 +233,7 @@ def test_compute_km_excludes_outside_range() -> None:
 
     result = compute_km(_SAMPLE_ACTIVITIES, date(2025, 2, 1), date(2025, 2, 28))
     assert result["total_km"] == 8.0
-    assert result["runs"] == 1
+    assert result["count"] == 1
 
 
 def test_compute_km_full_range() -> None:
@@ -241,14 +241,14 @@ def test_compute_km_full_range() -> None:
 
     result = compute_km(_SAMPLE_ACTIVITIES, date(2025, 1, 1), date(2025, 12, 31))
     assert result["total_km"] == pytest.approx(54.6, abs=0.01)
-    assert result["runs"] == 4
+    assert result["count"] == 4
 
 
 def test_compute_km_empty_activities() -> None:
     from tgbot.km_query import compute_km
 
     result = compute_km([], date(2025, 1, 1), date(2025, 12, 31))
-    assert result == {"total_km": 0.0, "runs": 0}
+    assert result == {"total_km": 0.0, "count": 0}
 
 
 def test_compute_km_boundary_inclusive() -> None:
@@ -257,11 +257,102 @@ def test_compute_km_boundary_inclusive() -> None:
     # Exactly on start and end boundaries
     result = compute_km(_SAMPLE_ACTIVITIES, date(2025, 1, 10), date(2025, 1, 10))
     assert result["total_km"] == 10.0
-    assert result["runs"] == 1
+    assert result["count"] == 1
 
 
 def test_compute_km_no_match() -> None:
     from tgbot.km_query import compute_km
 
     result = compute_km(_SAMPLE_ACTIVITIES, date(2024, 1, 1), date(2024, 12, 31))
-    assert result == {"total_km": 0.0, "runs": 0}
+    assert result == {"total_km": 0.0, "count": 0}
+
+
+def test_compute_km_cycling_type() -> None:
+    from tgbot.km_query import _CYCLE_TYPES, compute_km
+
+    result = compute_km(_SAMPLE_ACTIVITIES, date(2025, 1, 1), date(2025, 1, 31), _CYCLE_TYPES)
+    assert result["total_km"] == 40.0
+    assert result["count"] == 1
+
+
+def test_compute_km_excludes_non_run_types() -> None:
+    from tgbot.km_query import compute_km
+
+    # Default (runs only) must exclude Ride and Walk
+    result = compute_km(_SAMPLE_ACTIVITIES, date(2025, 1, 1), date(2025, 1, 31))
+    assert result["total_km"] == 25.5  # only the two Run activities
+
+
+# ---------------------------------------------------------------------------
+# parse_sport
+# ---------------------------------------------------------------------------
+
+
+def test_parse_sport_default_run() -> None:
+    from tgbot.km_query import _RUN_TYPES, parse_sport
+
+    assert parse_sport("how many km last year") == _RUN_TYPES
+
+
+def test_parse_sport_cycling() -> None:
+    from tgbot.km_query import _CYCLE_TYPES, parse_sport
+
+    assert parse_sport("how many km I have cycled last year") == _CYCLE_TYPES
+    assert parse_sport("how far did I bike this month") == _CYCLE_TYPES
+    assert parse_sport("km rode this year") == _CYCLE_TYPES
+
+
+def test_parse_sport_hiking() -> None:
+    from tgbot.km_query import _HIKE_TYPES, parse_sport
+
+    assert parse_sport("how far have I hiked ever") == _HIKE_TYPES
+    assert parse_sport("hiking km this year") == _HIKE_TYPES
+
+
+def test_parse_sport_swimming() -> None:
+    from tgbot.km_query import _SWIM_TYPES, parse_sport
+
+    assert parse_sport("how many km I have swam this year") == _SWIM_TYPES
+    assert parse_sport("swimming distance last month") == _SWIM_TYPES
+
+
+def test_parse_sport_walking() -> None:
+    from tgbot.km_query import _WALK_TYPES, parse_sport
+
+    assert parse_sport("how far did I walk last week") == _WALK_TYPES
+    assert parse_sport("walked km this month") == _WALK_TYPES
+
+
+def test_parse_sport_run_explicit() -> None:
+    from tgbot.km_query import _RUN_TYPES, parse_sport
+
+    assert parse_sport("how far did I run last year") == _RUN_TYPES
+
+
+# ---------------------------------------------------------------------------
+# is_km_query — sport verb extensions
+# ---------------------------------------------------------------------------
+
+
+def test_is_km_query_cycling() -> None:
+    from tgbot.km_query import is_km_query
+
+    assert is_km_query("how many km I have cycled last year") is True
+
+
+def test_is_km_query_hiking() -> None:
+    from tgbot.km_query import is_km_query
+
+    assert is_km_query("how far did I hike this year") is True
+
+
+def test_is_km_query_swimming() -> None:
+    from tgbot.km_query import is_km_query
+
+    assert is_km_query("how many km I swam last month") is True
+
+
+def test_is_km_query_walking() -> None:
+    from tgbot.km_query import is_km_query
+
+    assert is_km_query("walked distance this week") is True
