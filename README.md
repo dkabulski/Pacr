@@ -59,7 +59,7 @@ curl "https://api.telegram.org/bot<TOKEN>/getUpdates" | jq '.result[0].message.c
 | Command | Description | Example |
 |---------|-------------|---------|
 | `/start` | Greeting and status overview | `/start` |
-| `/sync` | Sync Strava activities | `/sync` |
+| `/sync [days]` | Sync Strava activities (default 365 days) | `/sync` or `/sync 50` |
 | `/today` | Today's prescribed session | `/today` |
 | `/week` | This week's plan vs completed sessions | `/week` |
 | `/next` | Next 5 upcoming sessions | `/next` |
@@ -77,9 +77,15 @@ curl "https://api.telegram.org/bot<TOKEN>/getUpdates" | jq '.result[0].message.c
 
 You can also send free-text messages to chat directly with your AI coach.
 
+### Long-term memory
+
+The bot uses a local ChromaDB vector store (`data/chroma/`) to remember coaching insights across conversations. When you share how a session felt, a race debrief, or a training preference, Claude saves it automatically. Relevant memories are retrieved on every message and injected into the coaching context. Strava activities (including `workout_type`) are also indexed on every sync, enabling semantic queries like "how have my races gone?" or "show me my long runs".
+
 ### Automatic Strava sync
 
 The bot polls Strava every 30 minutes (configurable via `STRAVA_POLL_INTERVAL` in `.env`). When a new activity is detected it is automatically analysed and a coaching note is sent to the chat. The delay before auto-analysis is controlled by `STRAVA_ANALYSIS_DELAY` (default: 600s / 10 min). Set `LOG_FORMAT=json` for structured JSON log output.
+
+Activity descriptions are fetched on explicit `/sync` calls but skipped during background polls to stay within Strava's rate limits (100 req/15 min).
 
 ## Docker
 
@@ -99,7 +105,7 @@ just docker-logs
 just docker-down
 ```
 
-The `data/` directory is stored in a named Docker volume (`running-coach-data`) so activity and plan data persists across container restarts.
+The `data/` directory is mounted from the host (`./data`) so all activity, plan, and vector memory data persists across container restarts. The ChromaDB embedding model (~80 MB) is cached in a named Docker volume (`chroma-model-cache`) so it is only downloaded once.
 
 ## Development
 
@@ -133,11 +139,14 @@ Pacr/
 │   │   ├── analyze.py           # Session analysis
 │   │   ├── plan.py              # Training plan management
 │   │   └── training_load.py     # CTL/ATL/TSB training load metrics
+│   ├── memory/
+│   │   └── store.py             # ChromaDB vector memory (save/query/index)
 │   └── tgbot/
 │       ├── __init__.py
 │       ├── bot.py               # Thin entry point + fire CLI
 │       ├── handlers.py          # Command handlers + BotConfig state
 │       ├── claude_chat.py       # Claude tool defs + orchestration
+│       ├── telegram_send.py     # Lightweight Telegram send (no circular deps)
 │       ├── formatters.py        # HTML formatters and data helpers
 │       ├── context.py           # Athlete context + VDOT helpers
 │       ├── debrief.py           # Post-run RPE debrief storage
@@ -168,6 +177,7 @@ All stored in `data/` (gitignored):
 | `training_log.json` | Analysed session history |
 | `debriefs.json` | Post-run RPE debriefs |
 | `conversation_history.json` | Telegram chat history |
+| `chroma/` | ChromaDB vector store (coaching memory + activity index) |
 
 ## Race Results — Power of 10
 
