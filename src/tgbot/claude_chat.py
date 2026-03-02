@@ -251,9 +251,11 @@ def execute_tools(msg: object) -> list:
                 strava_sync.sync(days)
                 note = _auto_analyse_new_activities(before_ids)
                 all_acts = strava_sync._load_cached()
-                from memory.store import index_activities
+                from memory.store import index_activities, index_debriefs
+                from tgbot.debrief import load_debriefs
 
                 indexed = index_activities(all_acts)
+                index_debriefs(load_debriefs())
                 result = (
                     f"Sync complete. Activities cache updated "
                     f"({indexed} indexed to memory)."
