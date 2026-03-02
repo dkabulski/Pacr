@@ -33,7 +33,7 @@ cp .env.example .env
 # Edit .env with your Strava, Telegram, and Anthropic keys
 
 # 4. Authorise with Strava (opens browser)
-uv run src/strava_auth.py authorize
+just auth
 
 # 5. Set your HR zones (replace 190 with your max HR)
 just zones 190
@@ -125,12 +125,14 @@ Pacr/
 ├── CLAUDE.md                    # AI agent project context
 ├── src/
 │   ├── _token_utils.py          # Shared token management (stdlib only)
-│   ├── strava_auth.py           # OAuth setup
-│   ├── strava_sync.py           # Activity sync + cache (retry/backoff)
-│   ├── pot10.py                 # Power of 10 results [EXPERIMENTAL]
-│   ├── plan.py                  # Training plan management
-│   ├── analyze.py               # Session analysis
-│   ├── training_load.py         # CTL/ATL/TSB training load metrics
+│   ├── strava_utils/
+│   │   ├── strava_auth.py       # OAuth setup
+│   │   ├── strava_sync.py       # Activity sync + cache (retry/backoff)
+│   │   └── pot10.py             # Power of 10 results [EXPERIMENTAL]
+│   ├── coach_utils/
+│   │   ├── analyze.py           # Session analysis
+│   │   ├── plan.py              # Training plan management
+│   │   └── training_load.py     # CTL/ATL/TSB training load metrics
 │   └── tgbot/
 │       ├── __init__.py
 │       ├── bot.py               # Thin entry point + fire CLI
@@ -173,13 +175,13 @@ All stored in `data/` (gitignored):
 > is unreliable. Manual entry is the recommended primary workflow:
 
 ```bash
-uv run src/pot10.py add --date=2025-06-15 --event=parkrun --distance=5K --time=22:30
+uv run src/strava_utils/pot10.py add --date=2025-06-15 --event=parkrun --distance=5K --time=22:30
 ```
 
 Web fetch (may fail):
 
 ```bash
-uv run src/pot10.py fetch --athlete_id=123456 --verbose
+uv run src/strava_utils/pot10.py fetch --athlete_id=123456 --verbose
 ```
 
 ## Future Improvements / GCP Deployment
