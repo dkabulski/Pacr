@@ -126,6 +126,56 @@ def index_activities(activities: list[dict]) -> int:
         return 0
 
 
+def index_debriefs(debriefs: dict[str, dict]) -> int:
+    """Upsert post-run debrief notes into the vector store.
+
+    Uses ``"debrief_{activity_id}"`` as the document ID so re-indexing is
+    idempotent and there is no collision with plain activity IDs.
+
+    Args:
+        debriefs: Dict keyed by str(activity_id) as returned by load_debriefs().
+
+    Returns:
+        Number of debriefs successfully indexed, or 0 on failure.
+    """
+    col = _get_collection()
+    if col is None:
+        return 0
+    if not debriefs:
+        return 0
+    try:
+        docs: list[str] = []
+        ids: list[str] = []
+        metas: list[dict[str, str | int | float]] = []
+        for act_id_str, d in debriefs.items():
+            name = d.get("activity_name", "Run")
+            date = d.get("activity_date", "")[:10]
+            rpe = d.get("rpe", 0)
+            notes = d.get("notes", "").strip()
+            text = f'RPE {rpe}/10 after "{name}" on {date}'
+            if notes:
+                text += f": {notes}"
+            docs.append(text)
+            ids.append(f"debrief_{act_id_str}")
+            metas.append(
+                {
+                    "category": "debrief",
+                    "date": date,
+                    "rpe": int(rpe),
+                    "activity_id": act_id_str,
+                }
+            )
+        if not docs:
+            return 0
+        logger.info("ChromaDB index_debriefs: upserting %d debriefs", len(docs))
+        col.upsert(documents=docs, metadatas=metas, ids=ids)  # type: ignore[union-attr]
+        logger.info("ChromaDB index_debriefs: done")
+        return len(docs)
+    except Exception:
+        logger.warning("index_debriefs failed", exc_info=True)
+        return 0
+
+
 def query_memories(query: str, n_results: int = 5) -> list[dict]:
     """Retrieve the most relevant coaching memories for a query.
 

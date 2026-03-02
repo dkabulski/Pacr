@@ -429,9 +429,12 @@ async def cmd_sync(update: object, context: object) -> None:
         await asyncio.to_thread(strava_sync.sync, days)
         activities = await asyncio.to_thread(strava_sync._load_cached)
         logger.info("/sync complete: %d activities cached", len(activities))
-        from memory.store import index_activities
+        from memory.store import index_activities, index_debriefs
+        from tgbot.debrief import load_debriefs
 
         indexed = await asyncio.to_thread(index_activities, activities)
+        debriefs = await asyncio.to_thread(load_debriefs)
+        await asyncio.to_thread(index_debriefs, debriefs)
         await update.message.reply_text(  # type: ignore[union-attr]
             f"Sync complete. {len(activities)} activities cached, "
             f"{indexed} indexed to memory.",
@@ -690,6 +693,12 @@ async def cmd_message(update: object, context: object) -> None:
                 rpe,
                 notes,
             )
+            from memory.store import index_debriefs
+            from tgbot.debrief import load_debriefs
+
+            await asyncio.to_thread(
+                index_debriefs, await asyncio.to_thread(load_debriefs)
+            )
             config.pending_debriefs.pop(cid, None)
             await update.message.reply_text(f"RPE {rpe}/10 logged.")  # type: ignore[union-attr]
             return
@@ -736,14 +745,40 @@ async def cmd_message(update: object, context: object) -> None:
         reply = await asyncio.to_thread(call_claude, api_key, history, config.activity_type)
     except Exception as e:
         logger.exception("Claude call failed")
-        await update.message.reply_text(  # type: ignore[union-attr]
-            f"Sorry, something went wrong: {e}"
-        )
+        try:
+            import anthropic as _anthropic
+
+            if isinstance(e, _anthropic.RateLimitError):
+                msg = (
+                    "The AI service is rate-limited right now. "
+                    "Please wait a minute and try again."
+                )
+            elif isinstance(e, _anthropic.InternalServerError):
+                msg = (
+                    "The AI service is temporarily overloaded. "
+                    "Please try again in a moment."
+                )
+            elif isinstance(e, _anthropic.APIConnectionError):
+                msg = (
+                    "Couldn't reach the AI service — "
+                    "check your internet connection and try again."
+                )
+            elif isinstance(e, _anthropic.APITimeoutError):
+                msg = "The AI service timed out. Please try again."
+            elif isinstance(e, _anthropic.AuthenticationError):
+                msg = "AI service authentication failed — check your API key."
+            elif isinstance(e, _anthropic.AnthropicError):
+                msg = "The AI service returned an error. Please try again shortly."
+            else:
+                msg = "Sorry, something went wrong. Please try again."
+        except ImportError:
+            msg = "Sorry, something went wrong. Please try again."
+        await update.message.reply_text(msg)  # type: ignore[union-attr]
         return
 
     if not reply:
         await update.message.reply_text(  # type: ignore[union-attr]
-            "Sorry, I couldn't generate a response."
+            "The AI returned an empty response — please try again."
         )
         return
 
