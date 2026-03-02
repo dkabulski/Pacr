@@ -19,7 +19,7 @@ import os
 import sys
 import urllib.parse
 import urllib.request
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time as dt_time
 from pathlib import Path
 
 # When run as a uv script, add src/ to sys.path so sibling modules resolve.
@@ -56,6 +56,7 @@ logger = logging.getLogger("pacr")
 
 STRAVA_POLL_INTERVAL = int(os.environ.get("STRAVA_POLL_INTERVAL", "1800"))
 STRAVA_ANALYSIS_DELAY = int(os.environ.get("STRAVA_ANALYSIS_DELAY", "600"))  # 10 min
+MORNING_CHECKIN_HOUR = int(os.environ.get("MORNING_CHECKIN_HOUR", "8"))
 
 # Re-export from submodules so tests can import via `tgbot.bot.*`
 from tgbot.claude_chat import (  # noqa: E402, F401
@@ -99,6 +100,7 @@ from tgbot.handlers import (  # noqa: E402, F401
     _filter_by_sport,
     _heartbeat,
     _load_history,
+    morning_checkin,
     _load_settings,
     _run_analysis,
     _save_history,
@@ -301,6 +303,12 @@ def bot() -> None:
         MessageHandler(chat_filter & filters.TEXT & ~filters.COMMAND, cmd_message)
     )
     app.job_queue.run_repeating(_heartbeat, interval=STRAVA_POLL_INTERVAL, first=60)
+    app.job_queue.run_daily(
+        morning_checkin,
+        time=dt_time(hour=MORNING_CHECKIN_HOUR, minute=0, tzinfo=UTC),
+        name="morning_checkin",
+    )
+    logger.info("Morning check-in scheduled at %02d:00 UTC", MORNING_CHECKIN_HOUR)
     app.run_polling()
 
 

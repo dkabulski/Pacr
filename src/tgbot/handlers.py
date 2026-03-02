@@ -371,6 +371,38 @@ async def _deferred_analysis(context: object) -> None:
     await _run_analysis(new_act_ids, context, config.chat_id)
 
 
+async def morning_checkin(context: object) -> None:
+    """Send a conversational 8am check-in with today's session."""
+    from tgbot.formatters import _today_session
+
+    config = _cfg(context)
+    session = _today_session()
+
+    if session:
+        stype = session.get("type", "session").title()
+        desc = session.get("description", "")
+        dist = session.get("distance_km")
+        dist_str = f" ({dist} km)" if dist else ""
+        text = (
+            f"Morning! How are you feeling today?\n\n"
+            f"You've got a <b>{stype}{dist_str}</b> on the plan:\n"
+            f"{desc}\n\n"
+            f"Let me know how it goes — I'll pick it up from Strava automatically."
+        )
+    else:
+        text = (
+            "Morning! How are you feeling today?\n\n"
+            "Nothing on the plan — enjoy the rest. "
+            "Drop me a message if you want a chat about training."
+        )
+
+    await context.bot.send_message(  # type: ignore[union-attr]
+        chat_id=config.chat_id,
+        text=text,
+        parse_mode="HTML",
+    )
+
+
 async def cmd_start(update: object, context: object) -> None:
     logger.info("/start")
     status = await asyncio.to_thread(_format_status)
