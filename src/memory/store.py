@@ -46,6 +46,62 @@ def save_memory(text: str, metadata: dict[str, str | int | float]) -> bool:
         return False
 
 
+def index_activities(activities: list[dict]) -> int:
+    """Upsert Strava activities into the vector store for semantic search.
+
+    Uses the activity ID as the document ID so re-syncing is idempotent.
+
+    Args:
+        activities: List of normalised activity dicts (as stored in activities.json).
+
+    Returns:
+        Number of activities successfully indexed, or 0 on failure.
+    """
+    col = _get_collection()
+    if col is None:
+        return 0
+    if not activities:
+        return 0
+    try:
+        docs: list[str] = []
+        ids: list[str] = []
+        metas: list[dict[str, str | int | float]] = []
+        for act in activities:
+            act_id = act.get("id")
+            if act_id is None:
+                continue
+            name = act.get("name", "Run")
+            date = act.get("date", "")[:10]
+            dist = act.get("distance_km", 0.0)
+            pace = act.get("pace", "N/A")
+            hr = act.get("avg_hr")
+            hr_str = f", HR {hr:.0f} bpm" if hr else ""
+            elev = act.get("elevation_m")
+            elev_str = f", elev {elev:.0f}m" if elev else ""
+            sport = act.get("type", "Run")
+            text = (
+                f'"{name}" on {date}: {dist:.1f}km @ {pace}/km{hr_str}{elev_str}.'
+                f" Type: {sport}."
+            )
+            docs.append(text)
+            ids.append(str(act_id))
+            metas.append(
+                {
+                    "category": "strava_activity",
+                    "date": date,
+                    "type": sport,
+                    "distance_km": float(dist),
+                }
+            )
+        if not docs:
+            return 0
+        col.upsert(documents=docs, metadatas=metas, ids=ids)  # type: ignore[union-attr]
+        return len(docs)
+    except Exception:
+        logger.warning("index_activities failed", exc_info=True)
+        return 0
+
+
 def query_memories(query: str, n_results: int = 5) -> list[dict]:
     """Retrieve the most relevant coaching memories for a query.
 

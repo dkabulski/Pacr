@@ -181,7 +181,14 @@ def execute_tools(msg: object) -> list:
                 before_ids = {a["id"] for a in strava_sync._load_cached()}
                 strava_sync.sync(365)
                 note = _auto_analyse_new_activities(before_ids)
-                result = "Sync complete. Activities cache updated."
+                all_acts = strava_sync._load_cached()
+                from memory.store import index_activities
+
+                indexed = index_activities(all_acts)
+                result = (
+                    f"Sync complete. Activities cache updated "
+                    f"({indexed} indexed to memory)."
+                )
                 if note:
                     result += f"\n\nNew activity analysis:\n{note}"
             except Exception as e:

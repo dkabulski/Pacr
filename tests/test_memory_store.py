@@ -80,3 +80,71 @@ def test_query_memories_graceful_failure(tmp_data_dir: Path) -> None:
     with patch.object(store, "_get_collection", return_value=None):
         result = store.query_memories("anything")
     assert result == []
+
+
+def test_index_activities_roundtrip(tmp_data_dir: Path) -> None:
+    """Indexed activities should be retrievable by semantic query."""
+    from memory.store import index_activities, query_memories
+
+    acts = [
+        {
+            "id": 1001,
+            "name": "Brutal track intervals",
+            "date": "2026-03-01T07:00:00Z",
+            "distance_km": 8.0,
+            "pace": "4:10",
+            "avg_hr": 172.0,
+            "elevation_m": 5.0,
+            "type": "Run",
+        },
+        {
+            "id": 1002,
+            "name": "Easy recovery jog",
+            "date": "2026-03-02T08:00:00Z",
+            "distance_km": 6.0,
+            "pace": "5:45",
+            "avg_hr": 128.0,
+            "elevation_m": None,
+            "type": "Run",
+        },
+    ]
+    count = index_activities(acts)
+    assert count == 2
+
+    results = query_memories("hard interval session")
+    texts = [r["text"] for r in results]
+    assert any("Brutal track intervals" in t for t in texts)
+
+
+def test_index_activities_idempotent(tmp_data_dir: Path) -> None:
+    """Re-indexing the same activities should not raise or create duplicates."""
+    from memory.store import index_activities, query_memories
+
+    act = [
+        {
+            "id": 2001,
+            "name": "Sunday long run",
+            "date": "2026-03-01T09:00:00Z",
+            "distance_km": 20.0,
+            "pace": "5:20",
+            "avg_hr": 140.0,
+            "elevation_m": 120.0,
+            "type": "Run",
+        }
+    ]
+    index_activities(act)
+    index_activities(act)  # second upsert — must not raise
+
+    results = query_memories("long run")
+    assert len(results) == 1  # still only one entry
+
+
+def test_index_activities_graceful_failure(tmp_data_dir: Path) -> None:
+    """index_activities should return 0 when ChromaDB is unavailable."""
+    from memory import store
+
+    with patch.object(store, "_get_collection", return_value=None):
+        count = store.index_activities(
+            [{"id": 99, "name": "Run", "date": "2026-03-01"}]
+        )
+    assert count == 0
