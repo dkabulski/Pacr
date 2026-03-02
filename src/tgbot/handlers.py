@@ -31,11 +31,6 @@ from tgbot.formatters import (
     _weekly_summary,
 )
 from tgbot.km_query import (
-    compute_km,
-    describe_period,
-    is_km_query,
-    parse_period,
-    parse_sport,
     sport_label,
     types_for_key,
 )
@@ -716,37 +711,6 @@ async def cmd_message(update: object, context: object) -> None:
             set(pending_analysis["new_act_ids"]), context, config.chat_id
         )
         return
-
-    if is_km_query(user_text):
-        period = parse_period(user_text)
-        if period:
-            from strava_utils import strava_sync
-
-            start, end = period
-            types = parse_sport(user_text)
-            activities = await asyncio.to_thread(strava_sync._load_cached)
-            result = await asyncio.to_thread(
-                compute_km, activities, start, end, types
-            )
-            label = describe_period(start, end)
-            km, count = result["total_km"], result["count"]
-            word = sport_label(types)
-            s = "s" if count != 1 else ""
-            reply = (
-                f"You logged <b>{km:.1f} km</b> across "
-                f"<b>{count} {word}{s}</b> {label}."
-            )
-            logger.info(
-                "km_query answered locally: %.1f km, %d %s%s %s",
-                km,
-                count,
-                word,
-                s,
-                label,
-            )
-            await update.message.reply_text(reply, parse_mode="HTML")  # type: ignore[union-attr]
-            return
-    # (falls through to Claude if period not recognised)
 
     # Rate limit before forwarding to Claude
     now_ts = datetime.now(tz=UTC).timestamp()

@@ -118,6 +118,46 @@ TOOLS = [
         },
     },
     {
+        "name": "compute_distance",
+        "description": (
+            "Calculate total distance and activity count for a sport over a "
+            "time period. Use this for any question about how far the athlete "
+            "has run, cycled, swum, or walked over a specific period — "
+            "including follow-up questions like 'what about 2024?' that refer "
+            "to a previous distance query. Use breakdown='month' or "
+            "breakdown='year' to rank all periods and answer questions like "
+            "'biggest month', 'best year', 'peak training month'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "period": {
+                    "type": "string",
+                    "description": (
+                        "Time period in natural language: 'last year', '2024',"
+                        " 'this month', 'january 2024', 'last week', 'ever'. "
+                        "Omit when using breakdown to scan all history."
+                    ),
+                },
+                "sport": {
+                    "type": "string",
+                    "enum": ["run", "ride", "swim", "walk", "hike", "all"],
+                    "description": "Sport type (defaults to 'run').",
+                },
+                "breakdown": {
+                    "type": "string",
+                    "enum": ["month", "year"],
+                    "description": (
+                        "Group totals by this granularity and return them "
+                        "sorted by distance. Use to answer 'biggest month', "
+                        "'best year', 'peak training month', etc."
+                    ),
+                },
+            },
+            "required": [],
+        },
+    },
+    {
         "name": "lookup_activities",
         "description": (
             "Search cached Strava activities by date range and/or workout type. "
@@ -257,6 +297,90 @@ def execute_tools(msg: object) -> list:
                 result = (
                     "Memory saved." if ok else "Memory unavailable — could not save."
                 )
+        elif block.name == "compute_distance":
+            from collections import defaultdict
+
+            from tgbot.km_query import (
+                compute_km,
+                describe_period,
+                parse_period,
+                sport_label,
+                types_for_key,
+            )
+
+            period_str = block.input.get("period", "")
+            sport_key = block.input.get("sport", "run")
+            breakdown = block.input.get("breakdown", "")
+            types = (
+                None if sport_key == "all" else types_for_key(sport_key)
+            )
+            acts = strava_sync._load_cached()
+
+            if breakdown in ("month", "year"):
+                # Pre-filter by sport
+                if types:
+                    acts = [
+                        a for a in acts
+                        if a.get("type") in types
+                        or a.get("sport_type") in types
+                    ]
+                # Optionally narrow by period
+                if period_str:
+                    parsed = parse_period(period_str)
+                    if parsed:
+                        s_str = parsed[0].isoformat()
+                        e_str = parsed[1].isoformat()
+                        acts = [
+                            a for a in acts
+                            if s_str <= a.get("date", "")[:10] <= e_str
+                        ]
+                key_len = 7 if breakdown == "month" else 4
+                groups: dict[str, dict] = defaultdict(
+                    lambda: {"total_km": 0.0, "count": 0}
+                )
+                for a in acts:
+                    k = a.get("date", "")[:key_len]
+                    if not k:
+                        continue
+                    groups[k]["total_km"] += a.get("distance_km", 0.0)
+                    groups[k]["count"] += 1
+                if not groups:
+                    result = "No activities found."
+                else:
+                    ranked = sorted(
+                        groups.items(),
+                        key=lambda x: x[1]["total_km"],
+                        reverse=True,
+                    )
+                    word = sport_label(types) if types else "activity"
+                    lines = [
+                        f"  {k}: {v['total_km']:.1f} km"
+                        f" ({v['count']} {word}"
+                        f"{'s' if v['count'] != 1 else ''})"
+                        for k, v in ranked[:12]
+                    ]
+                    result = (
+                        f"Top {breakdown}s by distance:\n"
+                        + "\n".join(lines)
+                    )
+            else:
+                parsed = parse_period(period_str) if period_str else None
+                if parsed is None:
+                    result = (
+                        f"Could not parse period: {period_str!r}"
+                        if period_str
+                        else "Specify a period (e.g. 'last year', '2024')."
+                    )
+                else:
+                    start, end = parsed
+                    stats = compute_km(acts, start, end, types)
+                    label = describe_period(start, end)
+                    word = sport_label(types) if types else "activity"
+                    s = "s" if stats["count"] != 1 else ""
+                    result = (
+                        f"{stats['total_km']:.1f} km across "
+                        f"{stats['count']} {word}{s} {label}."
+                    )
         elif block.name == "lookup_activities":
             inp = block.input
             date_from = inp.get("date_from", "")
