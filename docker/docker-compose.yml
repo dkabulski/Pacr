@@ -19,6 +19,10 @@ services:
       - PYTHONUNBUFFERED=1
     volumes:
       - ../data:/skill/data
+      - chroma-model-cache:/root/.cache/chroma
     working_dir: /skill/src
     command: ["uv", "run", "tgbot/bot.py", "bot"]
     restart: unless-stopped
+
+volumes:
+  chroma-model-cache:

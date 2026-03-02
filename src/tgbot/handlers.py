@@ -159,8 +159,10 @@ def _auto_analyse_new_activities(before_ids: set[int]) -> str | None:
     if not new_acts:
         return None
 
+    _MAX_ANALYSED = 5
+    omitted = max(0, len(new_acts) - _MAX_ANALYSED)
     notes: list[str] = []
-    for act in new_acts:
+    for act in new_acts[:_MAX_ANALYSED]:
         result = analyze._analyze_activity(act)
         flags = result.get("flags", [])
         dist = act.get("distance_km", 0)
@@ -172,6 +174,8 @@ def _auto_analyse_new_activities(before_ids: set[int]) -> str | None:
         else:
             notes.append(f"{header} — on target.")
 
+    if omitted:
+        notes.append(f"({omitted} older activit{'y' if omitted == 1 else 'ies'} not shown.)")
     return "\n\n".join(notes) if notes else None
 
 
@@ -317,7 +321,7 @@ async def _heartbeat(context: object) -> None:
     before_ids = {
         a["id"] for a in await asyncio.to_thread(strava_sync._load_cached)
     }
-    await asyncio.to_thread(strava_sync.sync, 3)
+    await asyncio.to_thread(strava_sync.sync, 3, False)
     after = await asyncio.to_thread(strava_sync._load_cached)
     new_acts = [a for a in after if a["id"] not in before_ids]
     if not new_acts:
@@ -413,24 +417,38 @@ async def cmd_start(update: object, context: object) -> None:
 
 
 async def cmd_sync(update: object, context: object) -> None:
-    logger.info("/sync requested")
-    await update.message.reply_text("Syncing Strava activities...")  # type: ignore[union-attr]
+    args = (context.args or [])  # type: ignore[union-attr]
+    try:
+        days = int(args[0]) if args else 365
+    except (ValueError, IndexError):
+        days = 365
+    logger.info("/sync requested (%d days)", days)
+    await update.message.reply_text(  # type: ignore[union-attr]
+        f"Syncing Strava activities (last {days} days)…"
+    )
     from strava_utils import strava_sync
 
     config = _cfg(context)
     try:
         before_ids = {a["id"] for a in strava_sync._load_cached()}
-        await asyncio.to_thread(strava_sync.sync, 365)
+        await asyncio.to_thread(strava_sync.sync, days)
         activities = await asyncio.to_thread(strava_sync._load_cached)
         logger.info("/sync complete: %d activities cached", len(activities))
+        from memory.store import index_activities
+
+        indexed = await asyncio.to_thread(index_activities, activities)
         await update.message.reply_text(  # type: ignore[union-attr]
-            f"Sync complete. {len(activities)} activities cached.",
+            f"Sync complete. {len(activities)} activities cached, "
+            f"{indexed} indexed to memory.",
             parse_mode="HTML",
         )
         note = await asyncio.to_thread(_auto_analyse_new_activities, before_ids)
         if note:
+            _MAX_NOTE = 4000
+            header = "<b>New activity analysis (quick):</b>\n\n"
+            body = note if len(note) <= _MAX_NOTE else note[:_MAX_NOTE] + "…"
             await update.message.reply_text(  # type: ignore[union-attr]
-                f"<b>New activity analysis (quick):</b>\n\n{note}",
+                header + body,
                 parse_mode="HTML",
             )
         new_acts = [a for a in activities if a["id"] not in before_ids]

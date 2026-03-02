@@ -107,6 +107,7 @@ def normalize_activity(raw: dict) -> dict:
         "suffer_score": raw.get("suffer_score"),
         "calories": raw.get("calories"),
         "description": raw.get("description", "") or "",
+        "workout_type": raw.get("workout_type"),
     }
 
 
@@ -153,7 +154,7 @@ def _merge(existing: list[dict], new: list[dict]) -> list[dict]:
     return sorted(by_id.values(), key=lambda a: a["date"], reverse=True)
 
 
-def sync(days: int = 365) -> None:
+def sync(days: int = 365, fetch_descriptions: bool = True) -> None:
     """Fetch the last N days of Strava activities."""
     token = _token_utils.get_valid_token()
 
@@ -196,6 +197,29 @@ def sync(days: int = 365) -> None:
 
     normalised = [normalize_activity(a) for a in all_raw]
     existing = _load_cached()
+
+    # Fetch descriptions for new activities.
+    # The list endpoint (SummaryActivity) omits description — requires a
+    # separate GET /activities/{id} (DetailedActivity) per activity.
+    # Capped at 50 per sync to stay well within Strava's rate limits.
+    # Skipped for background heartbeat syncs (fetch_descriptions=False).
+    existing_ids = {a["id"] for a in existing}
+    new_acts = [a for a in normalised if a["id"] not in existing_ids]
+    if fetch_descriptions and new_acts:
+        _MAX_DESC_FETCHES = 50
+        fetched_desc = 0
+        for act in new_acts[:_MAX_DESC_FETCHES]:
+            desc = _fetch_description(act["id"])
+            if desc:
+                act["description"] = desc
+                fetched_desc += 1
+            _time.sleep(0.3)  # stay within 100 req/15 min rate limit
+        logger.info(
+            "Fetched descriptions for %d/%d new activities",
+            fetched_desc,
+            min(len(new_acts), _MAX_DESC_FETCHES),
+        )
+
     merged = _merge(existing, normalised)
     _save_cached(merged)
     logger.info("Synced %d activities (%d total cached)", len(normalised), len(merged))

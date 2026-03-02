@@ -129,7 +129,7 @@ def _compute_goal_pace(goal: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def _build_athlete_context(sport_key: str = "run") -> str:
+def _build_static_context(sport_key: str = "run") -> str:
     """Build a system prompt from SOUL.md and live athlete data.
 
     Injects coaching personality, current plan, recent activities, zones,
@@ -281,12 +281,12 @@ def _build_athlete_context(sport_key: str = "run") -> str:
                 iso = dt.isocalendar()
                 weeks_by_iso.setdefault((iso.year, iso.week), []).append((dt, act))
 
-            _MAX_SUMMARY_WEEKS = 104  # 2 years — keeps system prompt bounded
+            _MAX_SUMMARY_WEEKS = 13  # 3 months — keeps system prompt token count low
             all_weeks = sorted(weeks_by_iso.keys(), reverse=True)
             display_weeks = all_weeks[:_MAX_SUMMARY_WEEKS]
             omitted = len(all_weeks) - len(display_weeks)
 
-            lines.append("\nWeekly summaries (last 2 years):")
+            lines.append("\nWeekly summaries (last 3 months):")
             for (year, week) in display_weeks:
                 week_acts = [a for _, a in weeks_by_iso[(year, week)]]
                 total_km = sum(a.get("distance_km", 0) for a in week_acts)
@@ -302,7 +302,7 @@ def _build_athlete_context(sport_key: str = "run") -> str:
                 )
             if omitted:
                 lines.append(
-                    f"  ({omitted} older weeks not shown — use lookup_activities to search further back)"
+                    f"  ({omitted} older weeks not shown — use lookup_activities to search further back)"  # noqa: E501
                 )
     else:
         lines.append("\nNo recent activities cached.")
@@ -358,6 +358,34 @@ def _build_athlete_context(sport_key: str = "run") -> str:
     _context_cache[cache_key] = result
     _context_cache[ts_key] = datetime.now(tz=UTC).timestamp()
     return result
+
+
+def _build_athlete_context(sport_key: str = "run", query: str = "") -> str:
+    """Return the full system prompt, optionally augmented with relevant memories.
+
+    Calls _build_static_context (cached) then appends vector-retrieved coaching
+    notes when *query* is non-empty.  All existing callers are unaffected because
+    the *query* parameter defaults to "".
+    """
+    context = _build_static_context(sport_key)
+    if not query:
+        return context
+
+    try:
+        from memory.store import query_memories
+
+        memories = query_memories(query, n_results=5)
+    except Exception:
+        logger.warning("Failed to retrieve memories", exc_info=True)
+        memories = []
+
+    if not memories:
+        return context
+
+    lines = ["\nRelevant coaching notes from previous sessions:"]
+    for m in memories:
+        lines.append(f"  - {m['text']}")
+    return context + "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------

@@ -19,9 +19,22 @@ TOOLS = [
         "description": (
             "Fetch the athlete's latest Strava activities and update the "
             "local cache. Call this when the athlete asks to sync, refresh, "
-            "update, or fetch their Strava data or recent runs."
+            "update, or fetch their Strava data or recent runs. Use a larger "
+            "days value when the athlete asks for a full or historical sync."
         ),
-        "input_schema": {"type": "object", "properties": {}, "required": []},
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "days": {
+                    "type": "integer",
+                    "description": (
+                        "How many days of history to fetch (default 365). "
+                        "Use 3650 for a full 10-year backfill."
+                    ),
+                }
+            },
+            "required": [],
+        },
     },
     {
         "name": "save_plan",
@@ -71,12 +84,48 @@ TOOLS = [
         },
     },
     {
+        "name": "save_memory",
+        "description": (
+            "Save a coaching insight, athlete preference, or session note to "
+            "long-term memory so it can inform future conversations. Call this "
+            "when the athlete shares: how a session felt, race debrief observations, "
+            "training preferences, injury notes, or any personal detail worth "
+            "remembering. Do NOT call for routine factual queries."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": (
+                        "Self-contained coaching note, e.g. 'Tempo session on "
+                        "2026-03-02 felt harder than expected — busy streets, "
+                        "heavy legs. Athlete prefers the track for tempo work.'"
+                    ),
+                },
+                "category": {
+                    "type": "string",
+                    "enum": [
+                        "session_feedback",
+                        "race_debrief",
+                        "preference",
+                        "injury",
+                        "general",
+                    ],
+                },
+            },
+            "required": ["text", "category"],
+        },
+    },
+    {
         "name": "lookup_activities",
         "description": (
-            "Search cached Strava activities by date range. Use this when "
-            "the athlete asks about a specific past run, a particular date, "
-            "their longest run, fastest pace, or any historical session "
-            "detail beyond the last four weeks."
+            "Search cached Strava activities by date range and/or workout type. "
+            "Use this when the athlete asks about a specific past run, a particular "
+            "date, their longest run, fastest pace, any historical session detail "
+            "beyond the last four weeks, or questions about races, workouts, or "
+            "long runs specifically. Use workout_type to filter by type, and set "
+            "limit high (e.g. 9999) when counting all matching activities."
         ),
         "input_schema": {
             "type": "object",
@@ -89,9 +138,22 @@ TOOLS = [
                     "type": "string",
                     "description": "End date YYYY-MM-DD (inclusive)",
                 },
+                "workout_type": {
+                    "type": "string",
+                    "enum": ["race", "long run", "workout", "default run"],
+                    "description": (
+                        "Filter by Strava workout type. 'race' = flagged as a "
+                        "race by the athlete; 'long run' = marked as long run; "
+                        "'workout' = structured workout; 'default run' = "
+                        "unclassified run."
+                    ),
+                },
                 "limit": {
                     "type": "integer",
-                    "description": "Max activities to return (default 10)",
+                    "description": (
+                        "Max activities to return (default 10). "
+                        "Set to 9999 to retrieve all matching activities."
+                    ),
                 },
             },
             "required": [],
@@ -144,26 +206,78 @@ def execute_tools(msg: object) -> list:
                 result = f"Failed to save plan: {e}"
         elif block.name == "sync_strava":
             try:
+                days = int(block.input.get("days", 365))
                 before_ids = {a["id"] for a in strava_sync._load_cached()}
-                strava_sync.sync(365)
+                strava_sync.sync(days)
                 note = _auto_analyse_new_activities(before_ids)
-                result = "Sync complete. Activities cache updated."
+                all_acts = strava_sync._load_cached()
+                from memory.store import index_activities
+
+                indexed = index_activities(all_acts)
+                result = (
+                    f"Sync complete. Activities cache updated "
+                    f"({indexed} indexed to memory)."
+                )
                 if note:
                     result += f"\n\nNew activity analysis:\n{note}"
+                try:
+                    from tgbot.telegram_send import _send_telegram_message
+
+                    new_count = len(all_acts) - len(before_ids)
+                    tg_lines = [
+                        f"✅ Strava sync complete ({days}d window).",
+                        f"  • {new_count} new "
+                        f"activit{'y' if new_count == 1 else 'ies'} fetched",
+                        f"  • {indexed} activities indexed to memory",
+                    ]
+                    if note:
+                        tg_lines.append(f"\n{note}")
+                    _send_telegram_message("\n".join(tg_lines), parse_mode="HTML")
+                except Exception:
+                    logger.warning(
+                        "sync_strava: Telegram notification failed", exc_info=True
+                    )
             except Exception as e:
                 result = f"Sync failed: {e}"
+        elif block.name == "save_memory":
+            from datetime import UTC, datetime
+
+            from memory.store import save_memory
+
+            text = block.input.get("text", "").strip()
+            category = block.input.get("category", "general")
+            if not text:
+                result = "save_memory: text is required."
+            else:
+                metadata: dict[str, str | int | float] = {
+                    "category": category,
+                    "date": datetime.now(tz=UTC).strftime("%Y-%m-%d"),
+                }
+                ok = save_memory(text, metadata)
+                result = (
+                    "Memory saved." if ok else "Memory unavailable — could not save."
+                )
         elif block.name == "lookup_activities":
             inp = block.input
             date_from = inp.get("date_from", "")
             date_to = inp.get("date_to", "9999-12-31")
             limit = int(inp.get("limit", 10))
+            workout_type_filter = inp.get("workout_type", "")
+            from memory.store import _WORKOUT_TYPE_LABELS
+
             acts = [
                 a
                 for a in strava_sync._load_cached()
                 if date_from <= a.get("date", "")[:10] <= date_to
+                and (
+                    not workout_type_filter
+                    or _WORKOUT_TYPE_LABELS.get(
+                        a.get("workout_type") or 0, "default run"
+                    ) == workout_type_filter
+                )
             ][:limit]
             if not acts:
-                result = "No activities found for that date range."
+                result = "No activities found for those filters."
             else:
                 rows = []
                 for a in acts:
@@ -180,11 +294,18 @@ def execute_tools(msg: object) -> list:
                     )
                     elev = a.get("elevation_m")
                     elev_str = f", elev {elev:.0f}m" if elev else ""
+                    wtype = _WORKOUT_TYPE_LABELS.get(
+                        a.get("workout_type") or 0, "default run"
+                    )
                     rows.append(
                         f"{date} — {a.get('name', 'Run')}: "
-                        f"{dist:.2f}km in {t} @ {pace}/km{hr_str}{elev_str}."
+                        f"{dist:.2f}km in {t} @ {pace}/km{hr_str}{elev_str}"
+                        f" [{wtype}]."
                     )
-                result = "\n".join(rows)
+                result = (
+                    f"{len(acts)} activit{'y' if len(acts) == 1 else 'ies'} found.\n"
+                    + "\n".join(rows)
+                )
         else:
             result = f"Unknown tool: {block.name}"
         tool_results.append(
@@ -210,7 +331,15 @@ def call_claude(api_key: str, history: list[dict], sport_key: str = "run") -> st
     """
     import anthropic
 
-    system_prompt = _build_athlete_context(sport_key=sport_key)
+    query = next(
+        (
+            m["content"][:500]
+            for m in reversed(history)
+            if m.get("role") == "user" and isinstance(m.get("content"), str)
+        ),
+        "",
+    )
+    system_prompt = _build_athlete_context(sport_key=sport_key, query=query)
     client = anthropic.Anthropic(api_key=api_key)
     messages = list(history)
     cached_system = [
