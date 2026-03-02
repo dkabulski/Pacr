@@ -39,11 +39,26 @@ def save_memory(text: str, metadata: dict[str, str | int | float]) -> bool:
     if col is None:
         return False
     try:
+        category = metadata.get("category", "general")
+        logger.info("ChromaDB save_memory: category=%s text=%r", category, text[:80])
         col.add(documents=[text], metadatas=[metadata], ids=[str(uuid.uuid4())])  # type: ignore[union-attr]
+        logger.info("ChromaDB save_memory: saved OK")
         return True
     except Exception:
         logger.warning("save_memory failed", exc_info=True)
         return False
+
+
+# Strava workout_type codes → human-readable label
+_WORKOUT_TYPE_LABELS: dict[int, str] = {
+    0: "default run",
+    1: "race",
+    2: "long run",
+    3: "workout",
+    10: "default ride",
+    11: "race",
+    12: "workout ride",
+}
 
 
 def index_activities(activities: list[dict]) -> int:
@@ -79,9 +94,15 @@ def index_activities(activities: list[dict]) -> int:
             elev = act.get("elevation_m")
             elev_str = f", elev {elev:.0f}m" if elev else ""
             sport = act.get("type", "Run")
+            workout_type_raw = act.get("workout_type")
+            workout_label = (
+                _WORKOUT_TYPE_LABELS.get(int(workout_type_raw), "default")
+                if workout_type_raw is not None
+                else "default"
+            )
             text = (
                 f'"{name}" on {date}: {dist:.1f}km @ {pace}/km{hr_str}{elev_str}.'
-                f" Type: {sport}."
+                f" Type: {sport}. Workout type: {workout_label}."
             )
             docs.append(text)
             ids.append(str(act_id))
@@ -91,11 +112,14 @@ def index_activities(activities: list[dict]) -> int:
                     "date": date,
                     "type": sport,
                     "distance_km": float(dist),
+                    "workout_type": workout_label,
                 }
             )
         if not docs:
             return 0
+        logger.info("ChromaDB index_activities: upserting %d activities", len(docs))
         col.upsert(documents=docs, metadatas=metas, ids=ids)  # type: ignore[union-attr]
+        logger.info("ChromaDB index_activities: done")
         return len(docs)
     except Exception:
         logger.warning("index_activities failed", exc_info=True)
@@ -119,13 +143,20 @@ def query_memories(query: str, n_results: int = 5) -> list[dict]:
     try:
         count = col.count()  # type: ignore[union-attr]
         if count == 0:
+            logger.debug("ChromaDB query_memories: collection empty, skipping")
             return []
+        logger.info(
+            "ChromaDB query_memories: query=%r n_results=%d store_size=%d",
+            query[:80],
+            min(n_results, count),
+            count,
+        )
         results = col.query(  # type: ignore[union-attr]
             query_texts=[query],
             n_results=min(n_results, count),
             include=["documents", "metadatas", "distances"],
         )
-        return [
+        memories = [
             {"text": doc, "metadata": meta, "distance": dist}
             for doc, meta, dist in zip(
                 results["documents"][0],
@@ -134,6 +165,14 @@ def query_memories(query: str, n_results: int = 5) -> list[dict]:
                 strict=True,
             )
         ]
+        for m in memories:
+            logger.info(
+                "ChromaDB query_memories: hit dist=%.3f category=%s text=%r",
+                m["distance"],
+                m["metadata"].get("category", "?"),
+                m["text"][:80],
+            )
+        return memories
     except Exception:
         logger.warning("query_memories failed", exc_info=True)
         return []

@@ -281,12 +281,12 @@ def _build_static_context(sport_key: str = "run") -> str:
                 iso = dt.isocalendar()
                 weeks_by_iso.setdefault((iso.year, iso.week), []).append((dt, act))
 
-            _MAX_SUMMARY_WEEKS = 104  # 2 years — keeps system prompt bounded
+            _MAX_SUMMARY_WEEKS = 13  # 3 months — keeps system prompt token count low
             all_weeks = sorted(weeks_by_iso.keys(), reverse=True)
             display_weeks = all_weeks[:_MAX_SUMMARY_WEEKS]
             omitted = len(all_weeks) - len(display_weeks)
 
-            lines.append("\nWeekly summaries (last 2 years):")
+            lines.append("\nWeekly summaries (last 3 months):")
             for (year, week) in display_weeks:
                 week_acts = [a for _, a in weeks_by_iso[(year, week)]]
                 total_km = sum(a.get("distance_km", 0) for a in week_acts)
@@ -302,7 +302,7 @@ def _build_static_context(sport_key: str = "run") -> str:
                 )
             if omitted:
                 lines.append(
-                    f"  ({omitted} older weeks not shown — use lookup_activities to search further back)"
+                    f"  ({omitted} older weeks not shown — use lookup_activities to search further back)"  # noqa: E501
                 )
     else:
         lines.append("\nNo recent activities cached.")
