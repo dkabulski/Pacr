@@ -7,6 +7,7 @@
 #     "requests>=2.32",
 #     "beautifulsoup4>=4.12",
 #     "anthropic>=0.30",
+#     "chromadb>=0.6",
 # ]
 # ///
 """Telegram integration — send notifications and interactive bot."""

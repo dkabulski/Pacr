@@ -129,7 +129,7 @@ def _compute_goal_pace(goal: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def _build_athlete_context(sport_key: str = "run") -> str:
+def _build_static_context(sport_key: str = "run") -> str:
     """Build a system prompt from SOUL.md and live athlete data.
 
     Injects coaching personality, current plan, recent activities, zones,
@@ -358,6 +358,34 @@ def _build_athlete_context(sport_key: str = "run") -> str:
     _context_cache[cache_key] = result
     _context_cache[ts_key] = datetime.now(tz=UTC).timestamp()
     return result
+
+
+def _build_athlete_context(sport_key: str = "run", query: str = "") -> str:
+    """Return the full system prompt, optionally augmented with relevant memories.
+
+    Calls _build_static_context (cached) then appends vector-retrieved coaching
+    notes when *query* is non-empty.  All existing callers are unaffected because
+    the *query* parameter defaults to "".
+    """
+    context = _build_static_context(sport_key)
+    if not query:
+        return context
+
+    try:
+        from memory.store import query_memories
+
+        memories = query_memories(query, n_results=5)
+    except Exception:
+        logger.warning("Failed to retrieve memories", exc_info=True)
+        memories = []
+
+    if not memories:
+        return context
+
+    lines = ["\nRelevant coaching notes from previous sessions:"]
+    for m in memories:
+        lines.append(f"  - {m['text']}")
+    return context + "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------

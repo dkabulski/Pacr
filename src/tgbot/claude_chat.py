@@ -71,6 +71,40 @@ TOOLS = [
         },
     },
     {
+        "name": "save_memory",
+        "description": (
+            "Save a coaching insight, athlete preference, or session note to "
+            "long-term memory so it can inform future conversations. Call this "
+            "when the athlete shares: how a session felt, race debrief observations, "
+            "training preferences, injury notes, or any personal detail worth "
+            "remembering. Do NOT call for routine factual queries."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": (
+                        "Self-contained coaching note, e.g. 'Tempo session on "
+                        "2026-03-02 felt harder than expected — busy streets, "
+                        "heavy legs. Athlete prefers the track for tempo work.'"
+                    ),
+                },
+                "category": {
+                    "type": "string",
+                    "enum": [
+                        "session_feedback",
+                        "race_debrief",
+                        "preference",
+                        "injury",
+                        "general",
+                    ],
+                },
+            },
+            "required": ["text", "category"],
+        },
+    },
+    {
         "name": "lookup_activities",
         "description": (
             "Search cached Strava activities by date range. Use this when "
@@ -152,6 +186,24 @@ def execute_tools(msg: object) -> list:
                     result += f"\n\nNew activity analysis:\n{note}"
             except Exception as e:
                 result = f"Sync failed: {e}"
+        elif block.name == "save_memory":
+            from datetime import UTC, datetime
+
+            from memory.store import save_memory
+
+            text = block.input.get("text", "").strip()
+            category = block.input.get("category", "general")
+            if not text:
+                result = "save_memory: text is required."
+            else:
+                metadata: dict[str, str | int | float] = {
+                    "category": category,
+                    "date": datetime.now(tz=UTC).strftime("%Y-%m-%d"),
+                }
+                ok = save_memory(text, metadata)
+                result = (
+                    "Memory saved." if ok else "Memory unavailable — could not save."
+                )
         elif block.name == "lookup_activities":
             inp = block.input
             date_from = inp.get("date_from", "")
@@ -210,7 +262,15 @@ def call_claude(api_key: str, history: list[dict], sport_key: str = "run") -> st
     """
     import anthropic
 
-    system_prompt = _build_athlete_context(sport_key=sport_key)
+    query = next(
+        (
+            m["content"][:500]
+            for m in reversed(history)
+            if m.get("role") == "user" and isinstance(m.get("content"), str)
+        ),
+        "",
+    )
+    system_prompt = _build_athlete_context(sport_key=sport_key, query=query)
     client = anthropic.Anthropic(api_key=api_key)
     messages = list(history)
     cached_system = [
