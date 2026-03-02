@@ -164,8 +164,8 @@ TOOLS = [
             "Use this when the athlete asks about a specific past run, a particular "
             "date, their longest run, fastest pace, any historical session detail "
             "beyond the last four weeks, or questions about races, workouts, or "
-            "long runs specifically. Use workout_type to filter by type, and set "
-            "limit high (e.g. 9999) when counting all matching activities."
+            "long runs specifically. Use sort_by='distance_desc' with limit=10 "
+            "to find the longest runs — do NOT use limit > 100."
         ),
         "input_schema": {
             "type": "object",
@@ -188,11 +188,24 @@ TOOLS = [
                         "unclassified run."
                     ),
                 },
+                "sort_by": {
+                    "type": "string",
+                    "enum": [
+                        "date_desc",
+                        "date_asc",
+                        "distance_desc",
+                        "distance_asc",
+                    ],
+                    "description": (
+                        "Sort order (default 'date_desc'). Use 'distance_desc' "
+                        "to find longest runs, 'distance_asc' for shortest."
+                    ),
+                },
                 "limit": {
                     "type": "integer",
                     "description": (
-                        "Max activities to return (default 10). "
-                        "Set to 9999 to retrieve all matching activities."
+                        "Max activities to return (default 10, max 100). "
+                        "Use compute_distance for counting large sets."
                     ),
                 },
             },
@@ -231,7 +244,15 @@ def execute_tools(msg: object) -> list:
             elif not path.exists():
                 result = f"{filename} not found."
             else:
-                result = path.read_text()
+                _MAX_FILE_CHARS = 20_000
+                text = path.read_text()
+                if len(text) > _MAX_FILE_CHARS:
+                    result = (
+                        text[:_MAX_FILE_CHARS]
+                        + f"\n... [truncated — file is {len(text)} chars]"
+                    )
+                else:
+                    result = text
         elif block.name == "save_plan":
             from coach_utils import plan as plan_mod
 
@@ -387,11 +408,24 @@ def execute_tools(msg: object) -> list:
             inp = block.input
             date_from = inp.get("date_from", "")
             date_to = inp.get("date_to", "9999-12-31")
-            limit = int(inp.get("limit", 10))
+            limit = min(int(inp.get("limit", 10)), 100)
             workout_type_filter = inp.get("workout_type", "")
+            sort_by = inp.get("sort_by", "date_desc")
             from memory.store import _WORKOUT_TYPE_LABELS
 
-            acts = [
+            _sort_keys = {
+                "date_desc": lambda a: a.get("date", ""),
+                "date_asc": lambda a: a.get("date", ""),
+                "distance_desc": lambda a: a.get("distance_km", 0.0),
+                "distance_asc": lambda a: a.get("distance_km", 0.0),
+            }
+            _sort_reverse = {
+                "date_desc": True,
+                "date_asc": False,
+                "distance_desc": True,
+                "distance_asc": False,
+            }
+            filtered = [
                 a
                 for a in strava_sync._load_cached()
                 if date_from <= a.get("date", "")[:10] <= date_to
@@ -401,7 +435,12 @@ def execute_tools(msg: object) -> list:
                         a.get("workout_type") or 0, "default run"
                     ) == workout_type_filter
                 )
-            ][:limit]
+            ]
+            filtered.sort(
+                key=_sort_keys.get(sort_by, _sort_keys["date_desc"]),
+                reverse=_sort_reverse.get(sort_by, True),
+            )
+            acts = filtered[:limit]
             if not acts:
                 result = "No activities found for those filters."
             else:
@@ -429,7 +468,8 @@ def execute_tools(msg: object) -> list:
                         f" [{wtype}]."
                     )
                 result = (
-                    f"{len(acts)} activit{'y' if len(acts) == 1 else 'ies'} found.\n"
+                    f"{len(acts)} activit{'y' if len(acts) == 1 else 'ies'}"
+                    f" found (sorted by {sort_by}).\n"
                     + "\n".join(rows)
                 )
         else:
