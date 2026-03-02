@@ -22,7 +22,7 @@ fmt:
 
 # Type check
 typecheck:
-    uv run mypy src/_token_utils.py src/strava_auth.py src/strava_sync.py src/pot10.py src/analyze.py src/plan.py src/training_load.py src/tgbot/debrief.py src/tgbot/formatters.py src/tgbot/context.py src/tgbot/handlers.py src/tgbot/claude_chat.py src/tgbot/km_query.py src/tgbot/bot.py
+    uv run mypy src/_token_utils.py src/strava_utils/strava_auth.py src/strava_utils/strava_sync.py src/strava_utils/pot10.py src/coach_utils/analyze.py src/coach_utils/plan.py src/coach_utils/training_load.py src/tgbot/debrief.py src/tgbot/formatters.py src/tgbot/context.py src/tgbot/handlers.py src/tgbot/claude_chat.py src/tgbot/km_query.py src/tgbot/bot.py
 
 # Run tests
 test *ARGS:
@@ -34,11 +34,11 @@ test-cov:
 
 # Sync Strava activities
 sync DAYS="365":
-    uv run src/strava_sync.py sync --days={{DAYS}}
+    uv run src/strava_utils/strava_sync.py sync --days={{DAYS}}
 
 # Show current training plan
 plan:
-    uv run src/plan.py show
+    uv run src/coach_utils/plan.py show
 
 # Write data/athlete_zones.json from max heart rate (Jack Daniels percentages)
 # Usage: just zones 185
@@ -68,11 +68,11 @@ zones MAXHR='190':
 
 # Strava OAuth authorisation (opens browser)
 auth:
-    uv run src/strava_auth.py authorize
+    uv run src/strava_utils/strava_auth.py authorize
 
 # Check Strava token validity
 auth-status:
-    uv run src/strava_auth.py status
+    uv run src/strava_utils/strava_auth.py status
 
 # Install ruff pre-commit hooks
 pre-commit:

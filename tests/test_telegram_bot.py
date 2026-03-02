@@ -120,7 +120,7 @@ def test_format_weekly_summary() -> None:
     }
     text = fmt_mod._format_weekly_summary(summary)
     assert "<b>Weekly Summary" in text
-    assert "Runs: 4" in text
+    assert "Activities: 4" in text
     assert "35.5 km" in text
     assert "5:55/km" in text
 

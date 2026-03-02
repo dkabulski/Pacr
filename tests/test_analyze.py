@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import analyze
+from coach_utils import analyze
 
 
 def test_classify_hr_zone_recovery(sample_zones: dict) -> None:

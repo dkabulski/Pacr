@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import strava_sync
+from strava_utils import strava_sync
 
 
 def test_format_pace_normal() -> None:

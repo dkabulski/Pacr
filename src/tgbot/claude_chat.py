@@ -102,7 +102,7 @@ TOOLS = [
 
 def execute_tools(msg: object) -> list:
     """Run all tool calls in msg and return tool_results list."""
-    import strava_sync
+    from strava_utils import strava_sync
 
     tool_results = []
     for block in msg.content:  # type: ignore[union-attr]
@@ -131,7 +131,7 @@ def execute_tools(msg: object) -> list:
             else:
                 result = path.read_text()
         elif block.name == "save_plan":
-            import plan as plan_mod
+            from coach_utils import plan as plan_mod
 
             try:
                 plan_dict = block.input.get("plan", {})

@@ -15,8 +15,11 @@ Web scraping may fail. Use manual `add` as the primary workflow.
 from __future__ import annotations
 
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import fire
 import requests

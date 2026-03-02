@@ -3,15 +3,15 @@
 ## Project Layout
 
 - `SKILL.md` — tool catalog for OpenClaw agent (defines available commands)
-- `src/_token_utils.py` — shared Strava token management (stdlib only)
-- `src/strava_auth.py` — one-time OAuth setup (`uv run src/strava_auth.py authorize`)
-- `src/strava_sync.py` — fetch & cache Strava activities (`uv run src/strava_sync.py sync`)
-- `src/pot10.py` — Power of 10 race results by athlete ID ⚠ experimental
-- `src/analyze.py` — rate sessions against plan + HR/pace zones
-- `src/plan.py` — manage training plan JSON via stdin
+- `src/_token_utils.py` — shared token/data-dir management (stdlib only, shared across packages)
+- `src/strava_utils/strava_auth.py` — one-time OAuth setup (`uv run src/strava_utils/strava_auth.py authorize`)
+- `src/strava_utils/strava_sync.py` — fetch & cache Strava activities (`uv run src/strava_utils/strava_sync.py sync`)
+- `src/strava_utils/pot10.py` — Power of 10 race results by athlete ID ⚠ experimental
+- `src/coach_utils/analyze.py` — rate sessions against plan + HR/pace zones
+- `src/coach_utils/plan.py` — manage training plan JSON via stdin
+- `src/coach_utils/training_load.py` — CTL/ATL/TSB training load metrics
 - `src/tgbot/formatters.py` — HTML formatters and data helpers for Telegram messages
 - `src/tgbot/context.py` — athlete context building, VDOT helpers, Claude plan generation
-- `src/training_load.py` — CTL/ATL/TSB training load metrics
 - `src/tgbot/debrief.py` — post-run RPE parsing and debrief storage
 - `src/tgbot/km_query.py` — local km/distance query answering (no API calls)
 - `src/tgbot/bot.py` — Telegram CLI entry point (send + interactive bot)
@@ -37,8 +37,8 @@ just lint        # ruff check
 just fmt         # ruff format
 just test        # pytest
 just test-cov    # pytest with coverage
-just sync        # fetch Strava activities
-just plan        # show training plan
+just sync        # fetch Strava activities (src/strava_utils/strava_sync.py)
+just plan        # show training plan (src/coach_utils/plan.py)
 just deploy      # symlink to OpenClaw skills dir
 just tg-send     # send a test message to Telegram
 just tg-bot      # start interactive Telegram bot

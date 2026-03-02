@@ -11,10 +11,10 @@ COPY SKILL.md .
 COPY config/ config/
 
 # Pre-cache dependencies for each script
-RUN uv run --script src/strava_sync.py --help > /dev/null 2>&1 || true
-RUN uv run --script src/pot10.py --help > /dev/null 2>&1 || true
-RUN uv run --script src/plan.py --help > /dev/null 2>&1 || true
-RUN uv run --script src/analyze.py --help > /dev/null 2>&1 || true
+RUN uv run --script src/strava_utils/strava_sync.py --help > /dev/null 2>&1 || true
+RUN uv run --script src/strava_utils/pot10.py --help > /dev/null 2>&1 || true
+RUN uv run --script src/coach_utils/plan.py --help > /dev/null 2>&1 || true
+RUN uv run --script src/coach_utils/analyze.py --help > /dev/null 2>&1 || true
 RUN uv run --script src/tgbot/bot.py --help > /dev/null 2>&1 || true
 
 # Data directory (mount as volume)

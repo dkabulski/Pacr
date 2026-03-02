@@ -145,9 +145,8 @@ def _build_athlete_context(sport_key: str = "run") -> str:
         return str(cached)
 
     import _token_utils
-    import plan as plan_mod
-    import pot10
-    import strava_sync
+    from coach_utils import plan as plan_mod
+    from strava_utils import pot10, strava_sync
 
     activities = strava_sync._load_cached()
     lines: list[str] = []
@@ -210,7 +209,7 @@ def _build_athlete_context(sport_key: str = "run") -> str:
         lines.append("\nNo training zones configured (run: just zones <maxhr>).")
 
     # Training load (PMC)
-    from training_load import calculate_load_metrics, volume_spike_check
+    from coach_utils.training_load import calculate_load_metrics, volume_spike_check
 
     load_metrics = calculate_load_metrics(activities)
     lines.append(
@@ -396,8 +395,7 @@ def _generate_plan_with_claude(goal: str) -> dict:
     # Inject recent fitness data so the plan is anchored to actual form
     fitness_lines: list[str] = []
     try:
-        import pot10 as _pot10
-        import strava_sync as _ss
+        from strava_utils import pot10 as _pot10, strava_sync as _ss
 
         acts = _ss._load_cached()
         cutoff = (datetime.now(tz=UTC) - timedelta(days=56)).strftime("%Y-%m-%d")

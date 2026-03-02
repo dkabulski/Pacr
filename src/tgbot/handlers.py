@@ -151,8 +151,8 @@ def _auto_analyse_new_activities(before_ids: set[int]) -> str | None:
 
     Returns a coaching note if any new activities warrant feedback, else None.
     """
-    import analyze
-    import strava_sync
+    from coach_utils import analyze
+    from strava_utils import strava_sync
 
     after = strava_sync._load_cached()
     new_acts = [a for a in after if a["id"] not in before_ids]
@@ -189,8 +189,8 @@ async def _run_analysis(
     new_act_ids: set[int], context: object, chat_id: str
 ) -> None:
     """Re-sync, analyse specific activities, and prompt for debrief."""
-    import analyze
-    import strava_sync
+    from coach_utils import analyze
+    from strava_utils import strava_sync
 
     config = _cfg(context)
     logger.info(
@@ -309,7 +309,7 @@ async def _run_analysis(
 
 
 async def _heartbeat(context: object) -> None:
-    import strava_sync
+    from strava_utils import strava_sync
 
     config = _cfg(context)
     chat_id = config.chat_id
@@ -383,7 +383,7 @@ async def cmd_start(update: object, context: object) -> None:
 async def cmd_sync(update: object, context: object) -> None:
     logger.info("/sync requested")
     await update.message.reply_text("Syncing Strava activities...")  # type: ignore[union-attr]
-    import strava_sync
+    from strava_utils import strava_sync
 
     config = _cfg(context)
     try:
@@ -420,7 +420,7 @@ async def cmd_sync(update: object, context: object) -> None:
 
 
 async def cmd_plan(update: object, context: object) -> None:
-    import plan as plan_mod
+    from coach_utils import plan as plan_mod
 
     p = await asyncio.to_thread(plan_mod._load_plan)
     if p:
@@ -448,7 +448,7 @@ async def cmd_setplan(update: object, context: object) -> None:
         await update.message.reply_text(f"Failed to generate plan: {e}")  # type: ignore[union-attr]
         return
 
-    import plan as plan_mod
+    from coach_utils import plan as plan_mod
 
     try:
         await asyncio.to_thread(plan_mod._save_plan, plan_dict)
@@ -470,7 +470,7 @@ async def cmd_today(update: object, context: object) -> None:
 
 async def cmd_analyse(update: object, context: object) -> None:
     logger.info("/analyse requested")
-    import strava_sync
+    from strava_utils import strava_sync
 
     config = _cfg(context)
     activities = await asyncio.to_thread(strava_sync._load_cached)
@@ -485,7 +485,7 @@ async def cmd_analyse(update: object, context: object) -> None:
 
 
 async def cmd_results(update: object, context: object) -> None:
-    import pot10
+    from strava_utils import pot10
 
     results = await asyncio.to_thread(pot10._load_results)
     text = _format_results(results)
@@ -503,7 +503,7 @@ async def cmd_next(update: object, context: object) -> None:
 
 
 async def cmd_last(update: object, context: object) -> None:
-    import strava_sync
+    from strava_utils import strava_sync
 
     activities = await asyncio.to_thread(strava_sync._load_cached)
     activities = _filter_by_sport(activities, _cfg(context).activity_type)
@@ -531,8 +531,8 @@ async def cmd_zones(update: object, context: object) -> None:
 
 
 async def cmd_load(update: object, context: object) -> None:
-    import strava_sync
-    from training_load import (
+    from strava_utils import strava_sync
+    from coach_utils.training_load import (
         calculate_load_metrics,
         volume_spike_check,
         weekly_km_trend,
@@ -670,7 +670,7 @@ async def cmd_message(update: object, context: object) -> None:
     if is_km_query(user_text):
         period = parse_period(user_text)
         if period:
-            import strava_sync
+            from strava_utils import strava_sync
 
             start, end = period
             types = parse_sport(user_text)

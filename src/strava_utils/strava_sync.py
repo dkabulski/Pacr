@@ -12,9 +12,12 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 import time as _time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import fire
 import requests

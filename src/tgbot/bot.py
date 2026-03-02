@@ -221,7 +221,7 @@ def send_summary(period: str = "daily") -> None:
         summary = _weekly_summary()
         text = _format_weekly_summary(summary)
     else:
-        import strava_sync
+        from strava_utils import strava_sync
 
         activities = strava_sync._load_cached()
         if not activities:
@@ -306,7 +306,7 @@ def bot() -> None:
 
 def morning_briefing() -> None:
     """Send today's session and week progress as a morning briefing message."""
-    import plan as plan_mod
+    from coach_utils import plan as plan_mod
 
     p = plan_mod._load_plan()
     today_str = datetime.now(tz=UTC).strftime("%Y-%m-%d")

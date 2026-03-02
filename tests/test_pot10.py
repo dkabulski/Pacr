@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pot10
+from strava_utils import pot10
 
 
 def test_parse_results_valid_html(sample_po10_html: str) -> None:

@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 
 def _today_session() -> dict | None:
     """Match today's date against the training plan."""
-    import plan as plan_mod
+    from coach_utils import plan as plan_mod
 
     p = plan_mod._load_plan()
     if not p or "weeks" not in p:
@@ -37,7 +37,7 @@ def _weekly_summary(sport_types: set[str] | None = None) -> dict:
         {"runs": int, "total_km": float, "total_time_s": int,
          "avg_pace": str, "activities": [...], "sport_types": set|None}
     """
-    import strava_sync
+    from strava_utils import strava_sync
 
     activities = strava_sync._load_cached()
     cutoff = datetime.now(tz=UTC) - timedelta(days=7)
@@ -188,8 +188,8 @@ def _format_weekly_summary(summary: dict) -> str:
 
 def _format_week_vs_plan() -> str:
     """Format this week's planned sessions vs completed activities."""
-    import plan as plan_mod
-    import strava_sync
+    from coach_utils import plan as plan_mod
+    from strava_utils import strava_sync
 
     p = plan_mod._load_plan()
     if not p:
@@ -242,7 +242,7 @@ def _format_week_vs_plan() -> str:
 
 def _format_next_sessions(n: int = 5) -> str:
     """Format the next N upcoming sessions from the plan."""
-    import plan as plan_mod
+    from coach_utils import plan as plan_mod
 
     p = plan_mod._load_plan()
     if not p:
@@ -372,7 +372,7 @@ def _format_training_load(metrics: dict, trend: list[dict]) -> str:
 
 def _format_status() -> str:
     """Brief status: last sync, plan exists, today's session."""
-    import strava_sync
+    from strava_utils import strava_sync
 
     lines = ["<b>Pacr Status</b>"]
 
@@ -383,7 +383,7 @@ def _format_status() -> str:
     else:
         lines.append("No activities synced yet")
 
-    import plan as plan_mod
+    from coach_utils import plan as plan_mod
 
     p = plan_mod._load_plan()
     if p:
