@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
+import logging
 import os
 import stat
 import time
@@ -13,22 +15,65 @@ from pathlib import Path
 DATA_DIR = Path(__file__).parent.parent / "data"
 
 
+def configure_logging() -> None:
+    """Configure root logger: JSON lines if LOG_FORMAT=json, else human-readable."""
+    if os.environ.get("LOG_FORMAT") == "json":
+        import json as _json
+
+        class _JsonFormatter(logging.Formatter):
+            def format(self, record: logging.LogRecord) -> str:
+                return _json.dumps(
+                    {
+                        "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+                        "level": record.levelname,
+                        "logger": record.name,
+                        "msg": record.getMessage(),
+                    }
+                )
+
+        _handler = logging.StreamHandler()
+        _handler.setFormatter(_JsonFormatter())
+        logging.root.addHandler(_handler)
+        logging.root.setLevel(logging.INFO)
+    else:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+
+
 def read_tokens() -> dict | None:
-    """Read tokens from data/tokens.json, return None if missing."""
+    """Read tokens from data/tokens.json, falling back to env vars.
+
+    Returns None if neither the file nor the required env vars are present.
+    """
     path = DATA_DIR / "tokens.json"
-    if not path.exists():
-        return None
-    with open(path) as f:
-        return json.load(f)
+    if path.exists():
+        with open(path) as f:
+            return json.load(f)
+    # Container / CI fallback: inject token fields via environment variables.
+    access = os.environ.get("STRAVA_ACCESS_TOKEN")
+    refresh = os.environ.get("STRAVA_REFRESH_TOKEN")
+    expires = os.environ.get("STRAVA_TOKEN_EXPIRES_AT")
+    if access and refresh and expires:
+        return {
+            "access_token": access,
+            "refresh_token": refresh,
+            "expires_at": int(expires),
+        }
+    return None
 
 
 def write_tokens(tokens: dict) -> None:
-    """Write tokens to data/tokens.json with chmod 600."""
+    """Write tokens to data/tokens.json, attempting chmod 600."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     path = DATA_DIR / "tokens.json"
     with open(path, "w") as f:
         json.dump(tokens, f, indent=2)
-    os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+    # Graceful degradation on filesystems that don't support chmod (Docker volumes).
+    with contextlib.suppress(OSError):
+        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
 
 
 def refresh_access_token(
