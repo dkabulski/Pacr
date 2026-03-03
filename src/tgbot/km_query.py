@@ -41,7 +41,7 @@ _SWIM_TYPES: set[str] = {"Swim"}
 _WALK_TYPES: set[str] = {"Walk"}
 
 SPORT_KEY_MAP: dict[str, set[str]] = {
-    "run":  _RUN_TYPES,
+    "run": _RUN_TYPES,
     "ride": _CYCLE_TYPES,
     "hike": _HIKE_TYPES,
     "swim": _SWIM_TYPES,

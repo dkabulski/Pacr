@@ -22,7 +22,7 @@ fmt:
 
 # Type check
 typecheck:
-    uv run mypy src/_token_utils.py src/strava_utils/strava_auth.py src/strava_utils/strava_sync.py src/strava_utils/pot10.py src/coach_utils/analyze.py src/coach_utils/plan.py src/coach_utils/training_load.py src/tgbot/debrief.py src/tgbot/formatters.py src/tgbot/context.py src/tgbot/handlers.py src/tgbot/claude_chat.py src/tgbot/km_query.py src/tgbot/bot.py
+    uv run mypy src/_token_utils.py src/strava_utils/strava_auth.py src/strava_utils/strava_sync.py src/strava_utils/pot10.py src/coach_utils/analyze.py src/coach_utils/plan.py src/coach_utils/training_load.py src/coach_utils/adherence.py src/coach_utils/records.py src/coach_utils/wellness.py src/coach_utils/readiness.py src/tgbot/debrief.py src/tgbot/formatters.py src/tgbot/context.py src/tgbot/handlers.py src/tgbot/claude_chat.py src/tgbot/km_query.py src/tgbot/bot.py
 
 # Run tests
 test *ARGS:
@@ -42,7 +42,8 @@ plan:
 
 # Write data/athlete_zones.json from max heart rate (Jack Daniels percentages)
 # Usage: just zones 185
-zones MAXHR='190':
+# Optional: just zones 185 250 95  (maxhr, cycling FTP watts, swim CSS seconds/100m)
+zones MAXHR='190' CYCLING_FTP='' SWIM_CSS='':
     #!/usr/bin/env python3
     import json, pathlib
     m = {{MAXHR}}
@@ -62,6 +63,33 @@ zones MAXHR='190':
             "repetition":  [180, 209],
         },
     }
+    ftp_str = "{{CYCLING_FTP}}"
+    if ftp_str:
+        ftp = int(ftp_str)
+        zones["cycling"] = {
+            "ftp": ftp,
+            "power_zones": {
+                "recovery":  [0, round(ftp * 0.55)],
+                "endurance": [round(ftp * 0.56), round(ftp * 0.75)],
+                "tempo":     [round(ftp * 0.76), round(ftp * 0.90)],
+                "threshold": [round(ftp * 0.91), round(ftp * 1.05)],
+                "vo2max":    [round(ftp * 1.06), round(ftp * 1.20)],
+                "anaerobic": [round(ftp * 1.21), round(ftp * 1.50)],
+            },
+        }
+    css_str = "{{SWIM_CSS}}"
+    if css_str:
+        css = int(css_str)
+        zones["swimming"] = {
+            "css_per_100m": css,
+            "pace_zones": {
+                "recovery":  [css + 20, css + 40],
+                "endurance": [css + 5, css + 19],
+                "threshold": [css - 3, css + 4],
+                "vo2max":    [css - 15, css - 4],
+                "sprint":    [0, css - 16],
+            },
+        }
     pathlib.Path("data").mkdir(exist_ok=True)
     pathlib.Path("data/athlete_zones.json").write_text(json.dumps(zones, indent=2))
     print(json.dumps(zones, indent=2))
