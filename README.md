@@ -57,8 +57,15 @@ RPE 7/10 logged.
 ### Training load & race readiness
 See your fitness, fatigue and form (CTL/ATL/TSB) at a glance, with a 12-week weekly km chart. Ask whether you're ready for a specific race and goal time — the bot cross-checks your current load, long run coverage and VDOT.
 
-### Weekly plan & adherence
-Generate a structured training plan for any goal race and target time, following Jack Daniels' methodology. See today's session, this week vs plan, and a percentage adherence score over any number of weeks.
+### Training plan
+Generate a structured training plan for any goal race and target time, following Jack Daniels' methodology (base → build → sharpen → taper). Optionally cap training days per week and maximum weekly km so the plan fits your life.
+
+- `/planview` — compact week-by-week overview with phase, date range, and km totals
+- `/week` — this week's sessions vs what you've completed
+- `/week 5` — jump to any specific week in the plan
+- `/adherence` — percentage score across completed, partial, and missed sessions
+
+Sessions are formatted with emojis: 🔥 tempo/intervals, 🍃 easy, ⏳ long runs.
 
 ### Injury & wellness tracking
 Log niggles in plain language. The bot tracks them over time, detects patterns (e.g. recurring knee soreness after long runs), and factors them into its coaching advice.
@@ -147,12 +154,13 @@ All data (activities, plan, memory) is stored in `./data` on your host and persi
 | `/start` | Overview of your status and today's session |
 | `/sync [days]` | Sync Strava activities (default: last 365 days) |
 | `/today` | Today's prescribed training session |
-| `/week` | This week's plan vs what you've completed |
+| `/week [N]` | This week vs plan, or a specific week — e.g. `/week 5` |
 | `/next` | Next 5 upcoming sessions |
 | `/last` | Full breakdown of your last activity |
 | `/summary` | Last 7 days: distance, time, pace |
-| `/plan` | Full training plan overview |
-| `/setplan <goal>` | Generate a new AI training plan — e.g. `/setplan half marathon on April 3 2026 in 1:21h` |
+| `/plan` | Current week of training plan |
+| `/planview` | Week-by-week plan overview with phase and km totals |
+| `/setplan <goal> [--days=N] [--max-km=N]` | Generate a new AI training plan — e.g. `/setplan half marathon on April 3 2026 in 1:21h --days=5 --max-km=70` |
 | `/analyse` | Analyse last activity: pacing flags, HR zones, coaching opinion |
 | `/reanalyse` | Re-run analysis on the last activity |
 | `/load` | Training load: CTL (fitness), ATL (fatigue), TSB (form) + weekly km chart |
@@ -207,8 +215,24 @@ Is my CTL high enough for a marathon?
 ### Plan & adherence
 
 ```
+/planview
+→ W01  base        Mar 03–09    5 sessions  ~52 km ◀
+  W02  base        Mar 10–16    5 sessions  ~58 km
+  W03  build       Mar 17–23    5 sessions  ~65 km
+  ...
+
+/week 3
+→ Week 3 — build
+  ✓ 2026-03-17 — 🍃 easy: Easy aerobic 10 km
+  ✓ 2026-03-18 — 🔥 tempo: Threshold 8 km
+  · 2026-03-20 — 🍃 easy: Recovery 8 km
+  · 2026-03-21 — 🔥 intervals: 6×800m at interval pace
+  · 2026-03-22 — ⏳ long: Long run 20 km
+
+/setplan half marathon on May 17 2026 in 1:21h --days=5 --max-km=70
+→ Generating your plan...
+
 How well have I been sticking to my plan?
-/adherence 8
 Move Tuesday's tempo run to Thursday.
 Make next week a recovery week.
 ```
