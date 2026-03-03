@@ -45,7 +45,7 @@ def save_debrief(
 
 
 def parse_rpe(text: str) -> tuple[int | None, str]:
-    """Extract RPE (1–10) from user text.
+    """Extract RPE (1-10) from user text.
 
     Returns (rpe, notes) where notes is the original text.
     If text is "skip" (case-insensitive, stripped), returns (None, text).
