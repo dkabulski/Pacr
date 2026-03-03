@@ -26,18 +26,9 @@ Am I ready for a half marathon in 1:30?
 
 ## Screenshots
 
-<table>
-  <tr>
-    <td align="center"><b>Conversational stats & PBs</b></td>
-    <td align="center"><b>Training load (PMC)</b></td>
-    <td align="center"><b>Weekly plan + injury advice</b></td>
-  </tr>
-  <tr>
-    <td><img src="assets/example-1.png" width="280"/></td>
-    <td><img src="assets/example-2.png" width="280"/></td>
-    <td><img src="assets/example-3.png" width="280"/></td>
-  </tr>
-</table>
+![Pacr](assets/example-1.png)
+![Pacr](assets/example-2.png)
+![Pacr](assets/example-3.png)
 
 ---
 
