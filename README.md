@@ -1,6 +1,6 @@
 # Pacr
 
-![Élan](assets/pacr-logo.svg)
+![Pacr](assets/pacr-logo.svg)
 
 AI running coach powered by Claude. Analyses Strava data, looks up race results, and manages training plans following Jack Daniels' Running Formula methodology.
 
@@ -68,14 +68,167 @@ curl "https://api.telegram.org/bot<TOKEN>/getUpdates" | jq '.result[0].message.c
 | `/plan` | Training plan overview | `/plan` |
 | `/setplan <goal>` | Generate a new plan with AI | `/setplan half marathon on April 3 2026 in 1:21h` |
 | `/analyse` | Analyse last activity: flags, coaching opinion & debrief | `/analyse` |
+| `/reanalyse` | Re-analyse last activity on demand | `/reanalyse` |
 | `/results` | Cached race results | `/results` |
 | `/load` | Training load: CTL/ATL/TSB + weekly km | `/load` |
-| `/reanalyse` | Re-analyse last activity on demand | `/reanalyse` |
+| `/adherence [weeks]` | Plan adherence score (default 4 weeks) | `/adherence` or `/adherence 8` |
+| `/sport [type]` | Set activity filter: run / ride / hike / swim / walk / all | `/sport ride` |
 | `/zones` | HR and pace training zones | `/zones` |
 | `/clear` | Clear conversation history | `/clear` |
 | `/help` | Show all commands | `/help` |
 
 You can also send free-text messages to chat directly with your AI coach.
+
+## How to Use
+
+### Distance & mileage queries
+
+The coach resolves distance queries using your full Strava history, including follow-up questions that reference the previous answer.
+
+```
+How many km did I run last year?
+→ You logged 2 036.6 km across 179 runs in 2025.
+
+What about 2024?
+→ You logged 2 148.0 km across 180 runs in 2024.
+
+What's my biggest month ever?
+→ Top months by distance:
+    2024-09: 312.4 km (28 runs)
+    2023-08: 298.1 km (25 runs)
+    ...
+
+Best year for cycling?
+→ Top years by distance:
+    2024: 1 204.0 km (87 rides)
+    2023: 980.3 km (71 rides)
+```
+
+### Personal records
+
+```
+What are my PBs?
+→ Personal records:
+    5k Race: 21:04 (2024-09-14)
+    10k Race: 44:30 (2025-04-06)
+    Half Marathon Race: 1:41:22 (2025-10-05)
+    Longest Run: 42.2 km (2023-06-18)
+    Biggest Week: 112.4 km (2024-09-02)
+    Longest Streak: 14 days
+
+What's my longest run ever?
+→ (calls lookup_activities sorted by distance)
+    2023-06-18 — Very Long Sunday: 42.20 km in 4h12m @ 5:58/km [long run]
+```
+
+### Training history
+
+```
+Show me my races from 2024
+→ 8 activities found (sorted by date_desc).
+    2024-10-05 — Half Marathon: 21.10 km in 1:41:22 @ 4:48/km [race]
+    ...
+
+What was my fastest 10 km run?
+→ (sorted by pace, filtered to ~10 km runs)
+```
+
+### Training load & race readiness
+
+```
+How's my training load?
+→ (same as /load — CTL, ATL, TSB and weekly km trend)
+
+Am I ready for a half marathon in 1:30?
+→ Race readiness: ON TRACK
+    Goal: half marathon in 1:30h (4:16/km)
+    Weekly avg: 68.4 km (on target)
+    Longest recent run: 18.0 km (needs extension)
+    CTL: 72.4 (trend: rising)
+    VDOT: 52.0
+    Positive: CTL above target; weekly volume consistent
+    Concerns: Long run coverage below race distance
+```
+
+### Plan adherence
+
+```
+How well have I been sticking to my plan?
+→ (same as /adherence — completed, partial, missed, rest days honoured)
+
+/adherence 8
+→ Plan Adherence (8 weeks)
+    Score: 78%
+    ✅ Completed: 31
+    🔶 Partial: 6
+    ❌ Missed: 9
+    😴 Rest days honoured: 14/16
+```
+
+### Splits & pacing analysis
+
+```
+How were my splits on Thursday's run?
+→ Split analysis (10 splits):
+    Paces: 4:52, 4:48, 4:45, 4:41, 4:38, 4:35, 4:33, 4:30, 4:27, 4:22
+    Mean: 4:39/km, CV: 2.8%
+    Flags: negative_split
+
+Was my marathon evenly paced?
+→ (fetches splits for the activity and reports pacing pattern)
+```
+
+### Wellness & injury tracking
+
+```
+My left knee has been a bit sore after long runs, about a 3/10.
+→ Logged: soreness in left knee, severity 3/10. ID: abc123
+
+Any injury patterns I should know about?
+→ Active issues (1):
+    [abc123] 2026-03-01 — soreness in left knee, severity 3/10
+  Patterns detected (1):
+    ⚠ recurring_soreness: left knee — 3 entries in 14 days
+
+My knee is fine now.
+→ Issue abc123 resolved.
+```
+
+### Training plan management
+
+```
+Move Tuesday's tempo run to Thursday.
+→ (saves updated plan — all other sessions unchanged)
+
+Make next week a recovery week, cap everything at easy pace.
+→ (modifies plan and confirms the change)
+
+/setplan marathon on 15 June 2026 in 3:30
+→ Generating a 15-week plan using Jack Daniels mesocycles…
+```
+
+### Post-run debrief
+
+After each auto-detected activity you will be prompted:
+
+```
+🏃 New run detected: "Tuesday Tempo" — 12.4 km @ 4:32/km
+How did that feel? Reply with RPE 1–10 (or "skip").
+
+→ 7 — legs were heavy in the last 3 km
+
+RPE 7/10 logged. (saved to memory and indexed for future context)
+```
+
+### Switching sport focus
+
+```
+/sport ride
+→ Activity filter set to ride. /last, /summary, /load and /analyse now show only rides.
+
+/sport all
+→ Activity filter set to all.
+```
 
 ### Long-term memory
 
