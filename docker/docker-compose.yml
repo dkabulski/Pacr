@@ -1,0 +1,28 @@
+services:
+  running-coach:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.skills
+    env_file:
+      - ../.env
+    volumes:
+      - ../data:/skill/data
+    working_dir: /skill
+
+  telegram-bot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.skills
+    env_file:
+      - ../.env
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ../data:/skill/data
+      - chroma-model-cache:/root/.cache/chroma
+    working_dir: /skill/src
+    command: ["uv", "run", "tgbot/bot.py", "bot"]
+    restart: unless-stopped
+
+volumes:
+  chroma-model-cache:

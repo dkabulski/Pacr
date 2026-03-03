@@ -1,0 +1,23 @@
+FROM python:3.12-slim AS base
+
+# Install uv from official image
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /skill
+
+# Copy source tree and skill config
+COPY src/ src/
+COPY SKILL.md .
+COPY config/ config/
+
+# Pre-cache dependencies for each script
+RUN uv run --script src/strava_utils/strava_sync.py --help > /dev/null 2>&1 || true
+RUN uv run --script src/strava_utils/pot10.py --help > /dev/null 2>&1 || true
+RUN uv run --script src/coach_utils/plan.py --help > /dev/null 2>&1 || true
+RUN uv run --script src/coach_utils/analyze.py --help > /dev/null 2>&1 || true
+RUN uv run --script src/tgbot/bot.py --help > /dev/null 2>&1 || true
+
+# Data directory (mount as volume)
+RUN mkdir -p /skill/data
+
+CMD ["echo", "Pacr skill ready. Use uv run src/<script>.py <command>."]

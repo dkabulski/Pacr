@@ -1,0 +1,560 @@
+"""HTML formatters and data helpers for Telegram messages."""
+
+from __future__ import annotations
+
+import json
+from datetime import UTC, datetime, timedelta
+
+# ---------------------------------------------------------------------------
+# Data helpers
+# ---------------------------------------------------------------------------
+
+
+def _today_session() -> dict | None:
+    """Match today's date against the training plan."""
+    from coach_utils import plan as plan_mod
+
+    p = plan_mod._load_plan()
+    if not p or "weeks" not in p:
+        return None
+
+    today = datetime.now(tz=UTC).strftime("%Y-%m-%d")
+    for week in p["weeks"]:
+        for session in week.get("sessions", []):
+            if session.get("date") == today:
+                return session
+    return None
+
+
+def _weekly_summary(sport_types: set[str] | None = None) -> dict:
+    """Summarise the last 7 days of cached Strava activities.
+
+    Args:
+        sport_types: Strava type strings to include, or None for all sports.
+
+    Returns:
+        {"runs": int, "total_km": float, "total_time_s": int,
+         "avg_pace": str, "activities": [...], "sport_types": set|None}
+    """
+    from strava_utils import strava_sync
+
+    activities = strava_sync._load_cached()
+    cutoff = datetime.now(tz=UTC) - timedelta(days=7)
+
+    recent: list[dict] = []
+    for act in activities:
+        date_str = act.get("date", "")
+        if not date_str:
+            continue
+        try:
+            dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if (
+            sport_types
+            and act.get("type") not in sport_types
+            and act.get("sport_type") not in sport_types
+        ):
+            continue
+        if dt >= cutoff:
+            recent.append(act)
+
+    total_km = sum(a.get("distance_km", 0) for a in recent)
+    total_time = sum(a.get("moving_time_s", 0) for a in recent)
+    avg_pace = (
+        strava_sync.format_pace(total_km * 1000, total_time) if total_km > 0 else "N/A"
+    )
+
+    return {
+        "runs": len(recent),
+        "total_km": round(total_km, 1),
+        "total_time_s": total_time,
+        "avg_pace": avg_pace,
+        "activities": recent,
+        "sport_types": sport_types,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Session emoji helper
+# ---------------------------------------------------------------------------
+
+_SESSION_EMOJI: dict[str, str] = {
+    "easy": "🍃",
+    "long": "⏳",
+    "tempo": "🔥",
+    "intervals": "🔥",
+    "race": "🔥",
+}
+
+
+def _session_emoji(session_type: str) -> str:
+    """Return an emoji prefix for a session type, or '' for rest/unknown."""
+    return _SESSION_EMOJI.get(session_type.lower(), "")
+
+
+# ---------------------------------------------------------------------------
+# HTML formatters
+# ---------------------------------------------------------------------------
+
+
+def _format_activity_summary(activity: dict) -> str:
+    """Format a single activity as an HTML summary."""
+    name = activity.get("name", "Untitled")
+    dist = activity.get("distance_km", 0)
+    pace = activity.get("pace", "N/A")
+    hr = activity.get("avg_hr")
+    date = activity.get("date", "")[:10]
+
+    lines = [f"<b>{name}</b>"]
+    if date:
+        lines.append(f"Date: {date}")
+    lines.append(f"Distance: {dist:.1f} km")
+    lines.append(f"Pace: {pace}/km")
+    if hr:
+        lines.append(f"Avg HR: {hr:.0f} bpm")
+    return "\n".join(lines)
+
+
+def _format_today_session(session: dict | None) -> str:
+    """Format today's prescribed session or rest day message."""
+    if session is None:
+        return "No session prescribed today — rest day or no plan set."
+
+    session_type = session.get("type", "unknown")
+    if session_type == "rest":
+        return "Rest day — no session prescribed today."
+    desc = session.get("description", "")
+    dist = session.get("distance_km")
+    emoji = _session_emoji(session_type)
+    prefix = f"{emoji} " if emoji else ""
+
+    lines = [f"<b>Today: {prefix}{session_type.title()}</b>"]
+    if desc:
+        lines.append(desc)
+    if dist:
+        lines.append(f"Distance: {dist} km")
+    return "\n".join(lines)
+
+
+def _format_plan_summary(plan: dict) -> str:
+    """Format the training plan as an HTML overview."""
+    goal = plan.get("goal", "No goal set")
+    weeks = plan.get("weeks", [])
+    total_weeks = len(weeks)
+
+    lines = ["<b>Training Plan</b>", f"Goal: {goal}", f"Weeks: {total_weeks}"]
+
+    today = datetime.now(tz=UTC).strftime("%Y-%m-%d")
+    current_week = None
+    for i, week in enumerate(weeks):
+        for session in week.get("sessions", []):
+            if session.get("date", "") >= today:
+                current_week = (i, week)
+                break
+        if current_week:
+            break
+
+    if current_week:
+        idx, week = current_week
+        phase = week.get("phase", "")
+        lines.append(f"\n<b>Week {idx + 1}</b>" + (f" ({phase})" if phase else ""))
+        for session in week.get("sessions", []):
+            stype = session.get("type", "")
+            if stype == "rest":
+                continue
+            date = session.get("date", "")
+            desc = session.get("description", "")
+            emoji = _session_emoji(stype)
+            prefix = f"{emoji} " if emoji else ""
+            lines.append(f"  {date} — {prefix}{stype}: {desc}")
+
+    return "\n".join(lines)
+
+
+def _parse_session_km(session: dict) -> float | None:
+    """Best-effort extraction of distance in km from a plan session."""
+    import re
+
+    if "distance_km" in session:
+        return float(session["distance_km"])
+    desc = session.get("description", "")
+    m = re.search(r"(\d+(?:\.\d+)?)\s*km", desc, re.IGNORECASE)
+    if m:
+        return float(m.group(1))
+    return None
+
+
+def _format_week_by_number(week_num: int) -> str:
+    """Format a specific week (1-based) from the training plan."""
+    from coach_utils import plan as plan_mod
+    from strava_utils import strava_sync
+
+    p = plan_mod._load_plan()
+    if not p:
+        return "No training plan set."
+
+    weeks = p.get("weeks", [])
+    if week_num < 1 or week_num > len(weeks):
+        return f"Week {week_num} not found — plan has {len(weeks)} weeks."
+
+    week = weeks[week_num - 1]
+    phase = week.get("phase", "")
+    sessions = sorted(week.get("sessions", []), key=lambda s: s.get("date", ""))
+
+    today_str = datetime.now(tz=UTC).strftime("%Y-%m-%d")
+
+    # Dates that have a completed Strava activity
+    done_dates: set[str] = set()
+    if sessions:
+        first_date = sessions[0].get("date", "")
+        last_date = sessions[-1].get("date", "")
+        for act in strava_sync._load_cached():
+            d = act.get("date", "")[:10]
+            if first_date <= d <= last_date:
+                done_dates.add(d)
+
+    header = f"<b>Week {week_num}</b>" + (f" — {phase}" if phase else "")
+    lines = [header]
+    for session in sessions:
+        stype = session.get("type", "")
+        if stype == "rest":
+            continue
+        date = session.get("date", "")
+        desc = session.get("description", "")
+        emoji = _session_emoji(stype)
+        prefix = f"{emoji} " if emoji else ""
+        if date in done_dates:
+            marker = "✓"
+        elif date < today_str:
+            marker = "✗"
+        elif date == today_str:
+            marker = "→"
+        else:
+            marker = "·"
+        lines.append(f"{marker} {date} — {prefix}{stype}: {desc}")
+
+    return "\n".join(lines)
+
+
+def _format_plan_overview() -> str:
+    """Format a compact week-by-week overview of the full training plan."""
+    from coach_utils import plan as plan_mod
+
+    p = plan_mod._load_plan()
+    if not p:
+        return "No training plan set."
+
+    goal = p.get("goal", "No goal set")
+    weeks = p.get("weeks", [])
+    today_str = datetime.now(tz=UTC).strftime("%Y-%m-%d")
+
+    lines = ["<b>Plan Overview</b>", f"Goal: {goal}", ""]
+
+    for i, week in enumerate(weeks, start=1):
+        phase = week.get("phase", "")
+        sessions = week.get("sessions", [])
+        dates = [s.get("date", "") for s in sessions if s.get("date")]
+
+        # Date range label
+        if dates:
+            first = min(dates)
+            last = max(dates)
+            d_from = datetime.strptime(first, "%Y-%m-%d").strftime("%b %d")
+            d_to = datetime.strptime(last, "%Y-%m-%d").strftime("%b %d")
+            date_range = f"{d_from}–{d_to}"
+        else:
+            date_range = "—"
+
+        # km total (best-effort from descriptions)
+        km_parts = [_parse_session_km(s) for s in sessions if s.get("type") != "rest"]
+        km_values = [k for k in km_parts if k is not None]
+        km_str = f"~{sum(km_values):.0f} km" if km_values else "—"
+
+        # Current week marker
+        is_current = any(d >= today_str for d in dates) and any(
+            d <= today_str for d in dates
+        )
+        marker = " ◀" if is_current else ""
+
+        training_sessions = sum(1 for s in sessions if s.get("type") != "rest")
+        lines.append(
+            f"W{i:02d}  {phase:<10}  {date_range:<15}  "
+            f"{training_sessions} sessions  {km_str}{marker}"
+        )
+
+    return "\n".join(lines)
+
+
+def _format_results(results: list[dict], limit: int = 10) -> str:
+    """Format race results as an HTML table."""
+    if not results:
+        return "No race results cached."
+
+    lines = ["<b>Race Results</b>"]
+    for r in results[:limit]:
+        date = r.get("date", "?")
+        event = r.get("event", "?")
+        time_ = r.get("time", "?")
+        pos = r.get("position")
+        pos_str = f" #{pos}" if pos else ""
+        lines.append(f"  {date}  {event} — {time_}{pos_str}")
+
+    if len(results) > limit:
+        lines.append(f"  ... and {len(results) - limit} more")
+    return "\n".join(lines)
+
+
+def _format_weekly_summary(summary: dict) -> str:
+    """Format weekly summary as HTML."""
+    from tgbot.km_query import sport_label
+
+    runs = summary.get("runs", 0)
+    km = summary.get("total_km", 0)
+    time_s = summary.get("total_time_s", 0)
+    pace = summary.get("avg_pace", "N/A")
+    sport_types = summary.get("sport_types")
+
+    hours = time_s // 3600
+    mins = (time_s % 3600) // 60
+
+    label = sport_label(sport_types).title() + "s" if sport_types else "Activities"
+    lines = [
+        "<b>Weekly Summary (last 7 days)</b>",
+        f"{label}: {runs}",
+        f"Distance: {km:.1f} km",
+        f"Time: {hours}h {mins:02d}m",
+        f"Avg pace: {pace}/km",
+    ]
+    return "\n".join(lines)
+
+
+def _format_week_vs_plan() -> str:
+    """Format this week's planned sessions vs completed activities."""
+    from coach_utils import plan as plan_mod
+    from strava_utils import strava_sync
+
+    p = plan_mod._load_plan()
+    if not p:
+        return "No training plan set."
+
+    today = datetime.now(tz=UTC)
+    today_str = today.strftime("%Y-%m-%d")
+    iso = today.isocalendar()
+
+    week_sessions = []
+    for week in p.get("weeks", []):
+        for session in week.get("sessions", []):
+            date_str = session.get("date", "")
+            try:
+                s_iso = datetime.strptime(date_str, "%Y-%m-%d").isocalendar()
+                if s_iso[0] == iso[0] and s_iso[1] == iso[1]:
+                    week_sessions.append(session)
+            except ValueError:
+                continue
+
+    if not week_sessions:
+        return "No sessions planned for this week."
+
+    done_dates: set[str] = set()
+    for act in strava_sync._load_cached():
+        date_str = act.get("date", "")[:10]
+        try:
+            s_iso = datetime.strptime(date_str, "%Y-%m-%d").isocalendar()
+            if s_iso[0] == iso[0] and s_iso[1] == iso[1]:
+                done_dates.add(date_str)
+        except ValueError:
+            continue
+
+    lines = [f"<b>This Week (W{iso[1]})</b>"]
+    for session in sorted(week_sessions, key=lambda s: s.get("date", "")):
+        stype = session.get("type", "")
+        if stype == "rest":
+            continue
+        date = session.get("date", "")
+        desc = session.get("description", "")
+        if date in done_dates:
+            marker = "✓"
+        elif date < today_str:
+            marker = "✗"
+        elif date == today_str:
+            marker = "→"
+        else:
+            marker = "·"
+        emoji = _session_emoji(stype)
+        prefix = f"{emoji} " if emoji else ""
+        lines.append(f"{marker} {date} — {prefix}{stype}: {desc}")
+    return "\n".join(lines)
+
+
+def _format_next_sessions(n: int = 5) -> str:
+    """Format the next N upcoming sessions from the plan."""
+    from coach_utils import plan as plan_mod
+
+    p = plan_mod._load_plan()
+    if not p:
+        return "No training plan set."
+
+    today_str = datetime.now(tz=UTC).strftime("%Y-%m-%d")
+    upcoming = sorted(
+        (
+            s
+            for w in p.get("weeks", [])
+            for s in w.get("sessions", [])
+            if s.get("date", "") >= today_str
+        ),
+        key=lambda s: s.get("date", ""),
+    )[:n]
+
+    if not upcoming:
+        return "No upcoming sessions in the plan."
+
+    lines = ["<b>Upcoming Sessions</b>"]
+    for session in upcoming:
+        stype = session.get("type", "")
+        if stype == "rest":
+            continue
+        date = session.get("date", "")
+        desc = session.get("description", "")
+        emoji = _session_emoji(stype)
+        prefix = f"{emoji} " if emoji else ""
+        marker = "→" if date == today_str else "·"
+        lines.append(f"{marker} {date} — {prefix}{stype}: {desc}")
+    return "\n".join(lines)
+
+
+def _format_last_activity(activity: dict) -> str:
+    """Format a single activity with full detail."""
+    moving_s = activity.get("moving_time_s", 0)
+    hours = moving_s // 3600
+    mins = (moving_s % 3600) // 60
+    secs = moving_s % 60
+    time_str = f"{hours}h {mins:02d}m {secs:02d}s" if hours else f"{mins}:{secs:02d}"
+
+    hr = activity.get("avg_hr")
+    max_hr = activity.get("max_hr")
+    hr_str = (
+        f"{hr:.0f} bpm" + (f" (max {max_hr:.0f})" if max_hr else "") if hr else None
+    )
+
+    lines = [
+        f"<b>{activity.get('name', 'Last Run')}</b>",
+        f"Date: {activity.get('date', '')[:10]}",
+        f"Distance: {activity.get('distance_km', 0):.2f} km",
+        f"Time: {time_str}",
+        f"Pace: {activity.get('pace', 'N/A')}/km",
+    ]
+    if hr_str:
+        lines.append(f"Avg HR: {hr_str}")
+    elev = activity.get("elevation_m")
+    if elev:
+        lines.append(f"Elevation: {elev:.0f} m")
+    cadence = activity.get("avg_cadence")
+    if cadence:
+        lines.append(f"Cadence: {cadence:.0f} spm")
+    calories = activity.get("calories")
+    if calories:
+        lines.append(f"Calories: {calories}")
+    suffer = activity.get("suffer_score")
+    if suffer:
+        lines.append(f"Suffer score: {suffer}")
+    return "\n".join(lines)
+
+
+def _format_zones() -> str:
+    """Format HR and pace zones as HTML."""
+    import _token_utils
+
+    zones_path = _token_utils.DATA_DIR / "athlete_zones.json"
+    if not zones_path.exists():
+        return "No zones configured. Run: <code>just zones &lt;maxhr&gt;</code>"
+
+    zones = json.loads(zones_path.read_text())
+    hr_labels = {
+        "zone1": "Recovery",
+        "zone2": "Easy Aerobic",
+        "zone3": "Tempo",
+        "zone4": "Threshold",
+        "zone5": "VO2max",
+    }
+    lines = ["<b>Training Zones</b>"]
+    hr_zones = zones.get("hr_zones", {})
+    if hr_zones:
+        lines.append("\n<b>HR Zones</b>")
+        for key, label in hr_labels.items():
+            if key in hr_zones:
+                lo, hi = hr_zones[key]
+                lines.append(f"  {label}: {lo}–{hi} bpm")
+    pace_zones = zones.get("pace_zones", {})
+    if pace_zones:
+        lines.append("\n<b>Pace Zones</b>")
+        for name, (lo, hi) in pace_zones.items():
+            lo_str = f"{lo // 60}:{lo % 60:02d}"
+            hi_str = f"{hi // 60}:{hi % 60:02d}"
+            lines.append(f"  {name.title()}: {lo_str}–{hi_str}/km")
+    return "\n".join(lines)
+
+
+def _format_training_load(metrics: dict, trend: list[dict]) -> str:
+    """Format CTL/ATL/TSB and weekly km bar chart as HTML."""
+    ctl = metrics.get("ctl", 0.0)
+    atl = metrics.get("atl", 0.0)
+    tsb = metrics.get("tsb", 0.0)
+
+    if tsb > 5:
+        label = "fresh"
+    elif tsb > -10:
+        label = "neutral"
+    elif tsb > -25:
+        label = "productive"
+    else:
+        label = "high fatigue"
+
+    lines = [
+        "<b>Training Load (PMC)</b>",
+        f"CTL (fitness): {ctl:.1f}",
+        f"ATL (fatigue): {atl:.1f}",
+        f"TSB (form): {tsb:+.1f} — {label}",
+        "",
+        "<b>Weekly km (last 12 weeks)</b>",
+    ]
+    for w in trend:
+        week = w["week"]
+        km = w["km"]
+        bar = "█" * min(int(km / 5), 20)
+        lines.append(f"<code>{week}  {km:5.1f} km  {bar}</code>")
+
+    return "\n".join(lines)
+
+
+def _format_status() -> str:
+    """Brief status: last sync, plan exists, today's session."""
+    from strava_utils import strava_sync
+
+    lines = ["<b>Pacr Status</b>"]
+
+    activities = strava_sync._load_cached()
+    if activities:
+        last_date = activities[0].get("date", "")[:10]
+        lines.append(f"Last activity: {last_date} ({len(activities)} cached)")
+    else:
+        lines.append("No activities synced yet")
+
+    from coach_utils import plan as plan_mod
+
+    p = plan_mod._load_plan()
+    if p:
+        goal = p.get("goal", "")
+        weeks = len(p.get("weeks", []))
+        lines.append(f"Plan: {goal} ({weeks} weeks)")
+    else:
+        lines.append("Plan: none set")
+
+    session = _today_session()
+    if session:
+        stype = session.get("type", "unknown")
+        lines.append(f"Today: {stype.title()}")
+    else:
+        lines.append("Today: rest day / no plan")
+
+    return "\n".join(lines)
