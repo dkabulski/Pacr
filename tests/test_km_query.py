@@ -7,7 +7,6 @@ from datetime import date, timedelta
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -270,7 +269,9 @@ def test_compute_km_no_match() -> None:
 def test_compute_km_cycling_type() -> None:
     from tgbot.km_query import _CYCLE_TYPES, compute_km
 
-    result = compute_km(_SAMPLE_ACTIVITIES, date(2025, 1, 1), date(2025, 1, 31), _CYCLE_TYPES)
+    result = compute_km(
+        _SAMPLE_ACTIVITIES, date(2025, 1, 1), date(2025, 1, 31), _CYCLE_TYPES
+    )
     assert result["total_km"] == 40.0
     assert result["count"] == 1
 

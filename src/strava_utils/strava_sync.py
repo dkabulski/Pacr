@@ -42,13 +42,11 @@ def _strava_get(
     """GET with exponential backoff for transient Strava errors."""
     for attempt in range(_MAX_RETRIES):
         try:
-            resp = requests.get(
-                url, headers=headers, params=params, timeout=timeout
-            )
+            resp = requests.get(url, headers=headers, params=params, timeout=timeout)
         except requests.exceptions.Timeout:
             if attempt == _MAX_RETRIES - 1:
                 raise
-            _time.sleep(2 ** attempt)
+            _time.sleep(2**attempt)
             continue
         if resp.status_code in _RETRYABLE:
             if attempt == _MAX_RETRIES - 1:
@@ -60,7 +58,7 @@ def _strava_get(
                 attempt + 1,
                 _MAX_RETRIES,
             )
-            _time.sleep(2 ** attempt)
+            _time.sleep(2**attempt)
             continue
         return resp
     raise RuntimeError("Strava request failed")
@@ -108,6 +106,8 @@ def normalize_activity(raw: dict) -> dict:
         "calories": raw.get("calories"),
         "description": raw.get("description", "") or "",
         "workout_type": raw.get("workout_type"),
+        "laps": [],
+        "splits_metric": [],
     }
 
 
@@ -135,6 +135,48 @@ def _fetch_description(activity_id: int) -> str:
     if resp.status_code != 200:
         return ""
     return resp.json().get("description", "") or ""
+
+
+def _fetch_detail_fields(activity_id: int) -> dict:
+    """Fetch laps, splits_metric, and description from DetailedActivity.
+
+    Returns dict with keys: description, laps, splits_metric.
+    Each lap/split is normalised to {distance_m, elapsed_time_s,
+    moving_time_s, avg_hr, max_hr, avg_speed, pace}.
+    """
+    token = _token_utils.get_valid_token()
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = _strava_get(
+        f"https://www.strava.com/api/v3/activities/{activity_id}",
+        headers=headers,
+    )
+    if resp.status_code != 200:
+        return {"description": "", "laps": [], "splits_metric": []}
+
+    data = resp.json()
+
+    def _normalize_split(s: dict) -> dict:
+        dist_m = s.get("distance", 0)
+        elapsed = s.get("elapsed_time", 0)
+        moving = s.get("moving_time", elapsed)
+        return {
+            "distance_m": dist_m,
+            "elapsed_time_s": elapsed,
+            "moving_time_s": moving,
+            "avg_hr": s.get("average_heartrate"),
+            "max_hr": s.get("max_heartrate"),
+            "avg_speed": s.get("average_speed", 0),
+            "pace": format_pace(dist_m, moving),
+        }
+
+    laps = [_normalize_split(lap) for lap in data.get("laps", [])]
+    splits = [_normalize_split(sp) for sp in data.get("splits_metric", [])]
+
+    return {
+        "description": data.get("description", "") or "",
+        "laps": laps,
+        "splits_metric": splits,
+    }
 
 
 def _save_cached(activities: list[dict]) -> None:
@@ -181,10 +223,14 @@ def sync(days: int = 365, fetch_descriptions: bool = True) -> None:
 
         if resp.status_code == 429:
             usage = resp.headers.get("X-RateLimit-Usage", "N/A")
-            raise RuntimeError(f"Strava rate limit hit (usage: {usage}). Try again later.")
+            raise RuntimeError(
+                f"Strava rate limit hit (usage: {usage}). Try again later."
+            )
 
         if resp.status_code != 200:
-            raise RuntimeError(f"Strava API error: HTTP {resp.status_code} — {resp.text[:200]}")
+            raise RuntimeError(
+                f"Strava API error: HTTP {resp.status_code} — {resp.text[:200]}"
+            )
 
         batch = resp.json()
         if not batch:
@@ -253,14 +299,17 @@ if __name__ == "__main__":
     import os as _os
 
     if _os.environ.get("LOG_FORMAT") == "json":
+
         class _JsonFormatter(logging.Formatter):
             def format(self, record: logging.LogRecord) -> str:
-                return json.dumps({
-                    "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
-                    "level": record.levelname,
-                    "logger": record.name,
-                    "msg": record.getMessage(),
-                })
+                return json.dumps(
+                    {
+                        "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+                        "level": record.levelname,
+                        "logger": record.name,
+                        "msg": record.getMessage(),
+                    }
+                )
 
         _handler = logging.StreamHandler()
         _handler.setFormatter(_JsonFormatter())

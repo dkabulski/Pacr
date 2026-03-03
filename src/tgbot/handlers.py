@@ -133,7 +133,9 @@ def _filter_by_sport(activities: list[dict], sport_key: str) -> list[dict]:
     types = types_for_key(sport_key)
     if types is None:
         return activities
-    return [a for a in activities if a.get("type") in types or a.get("sport_type") in types]
+    return [
+        a for a in activities if a.get("type") in types or a.get("sport_type") in types
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -170,7 +172,9 @@ def _auto_analyse_new_activities(before_ids: set[int]) -> str | None:
             notes.append(f"{header} — on target.")
 
     if omitted:
-        notes.append(f"({omitted} older activit{'y' if omitted == 1 else 'ies'} not shown.)")
+        notes.append(
+            f"({omitted} older activit{'y' if omitted == 1 else 'ies'} not shown.)"
+        )
     return "\n\n".join(notes) if notes else None
 
 
@@ -184,9 +188,7 @@ def _cfg(context: object) -> BotConfig:
     return context.bot_data["config"]  # type: ignore[index]
 
 
-async def _run_analysis(
-    new_act_ids: set[int], context: object, chat_id: str
-) -> None:
+async def _run_analysis(new_act_ids: set[int], context: object, chat_id: str) -> None:
     """Re-sync, analyse specific activities, and prompt for debrief."""
     from coach_utils import analyze
     from strava_utils import strava_sync
@@ -248,9 +250,7 @@ async def _run_analysis(
         for act, result in act_results:
             # Fetch description (not available from list API)
             logger.info("Fetching description for activity %s", act["id"])
-            desc = await asyncio.to_thread(
-                strava_sync._fetch_description, act["id"]
-            )
+            desc = await asyncio.to_thread(strava_sync._fetch_description, act["id"])
             if desc:
                 logger.info("Description fetched (%d chars)", len(desc))
             lines = [
@@ -283,9 +283,7 @@ async def _run_analysis(
                     ),
                     messages=[{"role": "user", "content": prompt}],
                 )
-                opinion = next(
-                    (b.text for b in msg.content if hasattr(b, "text")), ""
-                )
+                opinion = next((b.text for b in msg.content if hasattr(b, "text")), "")
                 if opinion:
                     logger.info("Coaching opinion sent (%d chars)", len(opinion))
                     await context.bot.send_message(  # type: ignore[union-attr]
@@ -313,9 +311,7 @@ async def _heartbeat(context: object) -> None:
     config = _cfg(context)
     chat_id = config.chat_id
     logger.info("Heartbeat: syncing Strava (last 3 days)…")
-    before_ids = {
-        a["id"] for a in await asyncio.to_thread(strava_sync._load_cached)
-    }
+    before_ids = {a["id"] for a in await asyncio.to_thread(strava_sync._load_cached)}
     await asyncio.to_thread(strava_sync.sync, 3, False)
     after = await asyncio.to_thread(strava_sync._load_cached)
     new_acts = [a for a in after if a["id"] not in before_ids]
@@ -331,10 +327,7 @@ async def _heartbeat(context: object) -> None:
     cid = int(chat_id)
     existing = config.pending_analysis.get(cid)
     merged_ids = list(
-        set(
-            (existing or {}).get("new_act_ids", [])
-            + [a["id"] for a in new_acts]
-        )
+        set((existing or {}).get("new_act_ids", []) + [a["id"] for a in new_acts])
     )
     if existing:
         for job in context.job_queue.get_jobs_by_name(existing["job_name"]):  # type: ignore[union-attr]
@@ -395,6 +388,22 @@ async def morning_checkin(context: object) -> None:
             "Drop me a message if you want a chat about training."
         )
 
+    # Wellness reminder
+    try:
+        from coach_utils.wellness import get_active_issues
+
+        active_issues = get_active_issues()
+        if active_issues:
+            parts = [
+                f"{i['body_part']} ({i['severity']}/10)" for i in active_issues[:3]
+            ]
+            text += (
+                f"\n\n\u26a0 Active issues: {', '.join(parts)}. "
+                "Let me know how they're feeling."
+            )
+    except Exception:
+        pass
+
     await context.bot.send_message(  # type: ignore[union-attr]
         chat_id=config.chat_id,
         text=text,
@@ -412,7 +421,7 @@ async def cmd_start(update: object, context: object) -> None:
 
 
 async def cmd_sync(update: object, context: object) -> None:
-    args = (context.args or [])  # type: ignore[union-attr]
+    args = context.args or []  # type: ignore[union-attr]
     try:
         days = int(args[0]) if args else 365
     except (ValueError, IndexError):
@@ -579,12 +588,12 @@ async def cmd_zones(update: object, context: object) -> None:
 
 
 async def cmd_load(update: object, context: object) -> None:
-    from strava_utils import strava_sync
     from coach_utils.training_load import (
         calculate_load_metrics,
         volume_spike_check,
         weekly_km_trend,
     )
+    from strava_utils import strava_sync
 
     activities = await asyncio.to_thread(strava_sync._load_cached)
     activities = _filter_by_sport(activities, _cfg(context).activity_type)
@@ -623,9 +632,34 @@ async def cmd_help(update: object, context: object) -> None:
         "/load — Training load: CTL/ATL/TSB + weekly km\n"
         "/results — Race results\n"
         "/zones — HR and pace training zones\n"
+        "/adherence [weeks] — Plan adherence score (default 4 weeks)\n"
         "/sport [type] — Set activity type filter (run/ride/hike/swim/walk/all)\n"
         "/clear — Clear conversation history\n"
         "/help — Show this help message"
+    )
+    await update.message.reply_text(text, parse_mode="HTML")  # type: ignore[union-attr]
+
+
+async def cmd_adherence(update: object, context: object) -> None:
+    args = context.args or []  # type: ignore[union-attr]
+    try:
+        weeks = int(args[0]) if args else 4
+    except (ValueError, IndexError):
+        weeks = 4
+    from coach_utils.adherence import calculate_adherence
+
+    data = await asyncio.to_thread(calculate_adherence, weeks)
+    pct = data["adherence_pct"]
+    honoured = data["rest_days_honoured"]
+    rest_total = data["rest_days_total"]
+    text = (
+        f"<b>Plan Adherence ({weeks} weeks)</b>\n\n"
+        f"Score: <b>{pct:.0f}%</b>\n"
+        f"\u2705 Completed: {data['completed']}\n"
+        f"\U0001f536 Partial: {data['partial']}\n"
+        f"\u274c Missed: {data['missed']}\n"
+        f"\U0001f634 Rest days honoured: "
+        f"{honoured}/{rest_total}"
     )
     await update.message.reply_text(text, parse_mode="HTML")  # type: ignore[union-attr]
 
@@ -742,7 +776,9 @@ async def cmd_message(update: object, context: object) -> None:
         history[:] = history[-_MAX_HISTORY:]
 
     try:
-        reply = await asyncio.to_thread(call_claude, api_key, history, config.activity_type)
+        reply = await asyncio.to_thread(
+            call_claude, api_key, history, config.activity_type
+        )
     except Exception as e:
         logger.exception("Claude call failed")
         try:

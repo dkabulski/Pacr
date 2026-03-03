@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 
-
 # ---------------------------------------------------------------------------
 # Data helpers
 # ---------------------------------------------------------------------------
@@ -51,7 +50,11 @@ def _weekly_summary(sport_types: set[str] | None = None) -> dict:
             dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
         except ValueError:
             continue
-        if sport_types and act.get("type") not in sport_types and act.get("sport_type") not in sport_types:
+        if (
+            sport_types
+            and act.get("type") not in sport_types
+            and act.get("sport_type") not in sport_types
+        ):
             continue
         if dt >= cutoff:
             recent.append(act)
@@ -250,8 +253,12 @@ def _format_next_sessions(n: int = 5) -> str:
 
     today_str = datetime.now(tz=UTC).strftime("%Y-%m-%d")
     upcoming = sorted(
-        (s for w in p.get("weeks", []) for s in w.get("sessions", [])
-         if s.get("date", "") >= today_str),
+        (
+            s
+            for w in p.get("weeks", [])
+            for s in w.get("sessions", [])
+            if s.get("date", "") >= today_str
+        ),
         key=lambda s: s.get("date", ""),
     )[:n]
 
@@ -278,7 +285,9 @@ def _format_last_activity(activity: dict) -> str:
 
     hr = activity.get("avg_hr")
     max_hr = activity.get("max_hr")
-    hr_str = f"{hr:.0f} bpm" + (f" (max {max_hr:.0f})" if max_hr else "") if hr else None
+    hr_str = (
+        f"{hr:.0f} bpm" + (f" (max {max_hr:.0f})" if max_hr else "") if hr else None
+    )
 
     lines = [
         f"<b>{activity.get('name', 'Last Run')}</b>",
