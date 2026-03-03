@@ -29,30 +29,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-if os.environ.get("LOG_FORMAT") == "json":
-    import json as _json_log
+import _token_utils  # noqa: E402
 
-    class _JsonFormatter(logging.Formatter):
-        def format(self, record: logging.LogRecord) -> str:
-            return _json_log.dumps(
-                {
-                    "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
-                    "level": record.levelname,
-                    "logger": record.name,
-                    "msg": record.getMessage(),
-                }
-            )
-
-    _handler = logging.StreamHandler()
-    _handler.setFormatter(_JsonFormatter())
-    logging.root.addHandler(_handler)
-    logging.root.setLevel(logging.INFO)
-else:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+_token_utils.configure_logging()
 logger = logging.getLogger("pacr")
 
 STRAVA_POLL_INTERVAL = int(os.environ.get("STRAVA_POLL_INTERVAL", "1800"))

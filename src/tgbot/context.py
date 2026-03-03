@@ -10,9 +10,9 @@ import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-logger = logging.getLogger("pacr")
-
 from .formatters import _today_session
+
+logger = logging.getLogger("pacr")
 
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
 
@@ -177,7 +177,8 @@ def _build_static_context(sport_key: str = "run") -> str:
             lines.append(f"\nWeek {i + 1} ({phase}){marker}:")
             for s in sessions:
                 lines.append(
-                    f"  {s.get('date', '')} — {s.get('type', '')}: {s.get('description', '')}"
+                    f"  {s.get('date', '')} — {s.get('type', '')}: "
+                    f"{s.get('description', '')}"
                 )
     else:
         lines.append("\nNo training plan set.")
@@ -296,7 +297,8 @@ def _build_static_context(sport_key: str = "run") -> str:
         desc = session.get("description", "")
         lines.append(f"\nToday's prescribed session: {stype} — {desc}.")
 
-    # Activities: individual detail for last 4 weeks, weekly summaries for all older history
+    # Activities: individual detail for last 4 weeks,
+    # weekly summaries for all older history
     if activities:
         cutoff_recent = datetime.now(tz=UTC) - timedelta(days=28)
 
@@ -343,7 +345,8 @@ def _build_static_context(sport_key: str = "run") -> str:
                     else ""
                 )
                 lines.append(
-                    f"  {date} — {name}: {dist:.1f} km @ {pace}/km{hr_str}{debrief_suffix}."
+                    f"  {date} — {name}: {dist:.1f} km"
+                    f" @ {pace}/km{hr_str}{debrief_suffix}."
                 )
 
         if older_acts:
@@ -372,8 +375,9 @@ def _build_static_context(sport_key: str = "run") -> str:
                 week_start = datetime.fromisocalendar(year, week, 1).strftime("%b %d")
                 week_end = datetime.fromisocalendar(year, week, 7).strftime("%b %d")
                 lines.append(
-                    f"  {year}-W{week:02d} ({week_start}–{week_end}): {len(week_acts)} runs, "
-                    f"{total_km:.1f} km, avg pace {pace_str}/km{hr_str}."
+                    f"  {year}-W{week:02d} ({week_start}–{week_end}):"
+                    f" {len(week_acts)} runs, {total_km:.1f} km,"
+                    f" avg pace {pace_str}/km{hr_str}."
                 )
             if omitted:
                 lines.append(
@@ -522,14 +526,17 @@ def _generate_plan_with_claude(goal: str) -> dict:
                 hr = a.get("avg_hr")
                 hr_str = f", HR {hr:.0f}" if hr else ""
                 fitness_lines.append(
-                    f"  {a.get('date', '')[:10]} — {a.get('distance_km', 0):.1f}km @ {a.get('pace', 'N/A')}/km{hr_str}"
+                    f"  {a.get('date', '')[:10]} — "
+                    f"{a.get('distance_km', 0):.1f}km"
+                    f" @ {a.get('pace', 'N/A')}/km{hr_str}"
                 )
         results = _pot10._load_results()
         if results:
             fitness_lines.append("Race results:")
             for r in results[:5]:
                 fitness_lines.append(
-                    f"  {r.get('date', '?')} {r.get('event', '?')} — {r.get('time', '?')}"
+                    f"  {r.get('date', '?')} {r.get('event', '?')}"
+                    f" — {r.get('time', '?')}"
                 )
     except Exception:
         pass
@@ -545,7 +552,8 @@ Today's date is {today}.
 Athlete's recent fitness data:
 {fitness_context}
 
-Generate a structured training plan as raw JSON only — no prose, no markdown fences, no explanation.
+Generate a structured training plan as raw JSON only.
+No prose, no markdown fences, no explanation.
 
 The JSON must follow this exact schema:
 {{

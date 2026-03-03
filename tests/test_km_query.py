@@ -127,7 +127,6 @@ def test_parse_period_named_month_abbreviation() -> None:
 def test_parse_period_named_month_no_year_uses_current() -> None:
     from tgbot.km_query import parse_period
 
-    today = _today()
     # Use a past month so we can predict the full range
     result = parse_period("km in december")
     assert result is not None

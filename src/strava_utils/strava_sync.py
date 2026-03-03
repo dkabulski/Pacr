@@ -296,29 +296,7 @@ def show(id: int | None = None, last: int = 10) -> None:
 
 
 if __name__ == "__main__":
-    import os as _os
+    import _token_utils as _tu
 
-    if _os.environ.get("LOG_FORMAT") == "json":
-
-        class _JsonFormatter(logging.Formatter):
-            def format(self, record: logging.LogRecord) -> str:
-                return json.dumps(
-                    {
-                        "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
-                        "level": record.levelname,
-                        "logger": record.name,
-                        "msg": record.getMessage(),
-                    }
-                )
-
-        _handler = logging.StreamHandler()
-        _handler.setFormatter(_JsonFormatter())
-        logging.root.addHandler(_handler)
-        logging.root.setLevel(logging.INFO)
-    else:
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
+    _tu.configure_logging()
     fire.Fire({"sync": sync, "show": show})
