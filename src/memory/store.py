@@ -176,12 +176,18 @@ def index_debriefs(debriefs: dict[str, dict]) -> int:
         return 0
 
 
-def query_memories(query: str, n_results: int = 5) -> list[dict]:
+def query_memories(
+    query: str, n_results: int = 5, max_distance: float = 1.35
+) -> list[dict]:
     """Retrieve the most relevant coaching memories for a query.
 
     Args:
         query: Natural-language query to embed and search.
         n_results: Maximum number of results to return.
+        max_distance: Cosine distance threshold — results above this are
+            discarded as too dissimilar (0 = identical, ~1.5 = unrelated).
+            Default 1.35 filters out clearly irrelevant hits (>1.4)
+            while keeping genuine semantic matches (~1.3 or below).
 
     Returns:
         List of dicts with keys 'text', 'metadata', 'distance'.
@@ -214,13 +220,20 @@ def query_memories(query: str, n_results: int = 5) -> list[dict]:
                 results["distances"][0],
                 strict=True,
             )
+            if dist <= max_distance
         ]
-        for m in memories:
+        if memories:
+            for m in memories:
+                logger.info(
+                    "ChromaDB query_memories: hit dist=%.3f category=%s text=%r",
+                    m["distance"],
+                    m["metadata"].get("category", "?"),
+                    m["text"][:80],
+                )
+        else:
             logger.info(
-                "ChromaDB query_memories: hit dist=%.3f category=%s text=%r",
-                m["distance"],
-                m["metadata"].get("category", "?"),
-                m["text"][:80],
+                "ChromaDB query_memories: no hits within max_distance=%.2f",
+                max_distance,
             )
         return memories
     except Exception:
