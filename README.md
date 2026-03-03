@@ -1,8 +1,6 @@
 # Pacr
 
-<p align="center">
-  <img src="assets/pacr-logo.svg" alt="Pacr" width="180"/>
-</p>
+![Pacr](assets/pacr-logo.svg)
 
 <p align="center">
   An AI running coach that lives in Telegram and knows your entire Strava history.
