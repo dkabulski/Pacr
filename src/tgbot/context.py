@@ -584,7 +584,8 @@ The JSON must follow this exact schema:
         {{
           "date": "<YYYY-MM-DD>",
           "type": "<easy|tempo|intervals|long|rest|race>",
-          "description": "<one-line British English description>"
+          "description": "<one-line British English description>",
+          "distance_km": <total session distance as a number, omit for rest>
         }}
       ]
     }}
@@ -596,6 +597,8 @@ Rules:
 - Calculate all session dates from today ({today}) working backwards from the race date
 - Include exactly 7 sessions per week (training days + rest days must sum to 7)
 - Use British English in descriptions
+- Set distance_km to the total session distance in km
+  (warm-up + main set + cool-down for tempo/intervals); omit for rest days
 {pace_line}
 {days_line}
 {km_line}
