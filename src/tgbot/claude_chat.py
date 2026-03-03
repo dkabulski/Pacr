@@ -212,6 +212,132 @@ TOOLS = [
             "required": [],
         },
     },
+    {
+        "name": "check_records",
+        "description": (
+            "Check the athlete's personal records and PBs — fastest race times "
+            "(5K, 10K, half marathon, marathon), longest run, biggest training "
+            "week and month, and longest activity streak. Call when the athlete "
+            "asks about their PBs, records, fastest times, or personal bests."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "plan_adherence",
+        "description": (
+            "Calculate how closely the athlete has followed their training plan. "
+            "Returns adherence percentage, completed/partial/missed session counts, "
+            "and rest day compliance. Call when the athlete asks about plan "
+            "compliance, adherence, consistency, or whether they've been sticking "
+            "to the plan."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "weeks": {
+                    "type": "integer",
+                    "description": "Number of weeks to assess (default 4).",
+                }
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "analyse_splits",
+        "description": (
+            "Analyse the per-kilometre splits and laps of a specific activity "
+            "for pacing patterns. Detects negative/positive splits, fast starts, "
+            "fades, and consistent pacing. Call when the athlete asks about their "
+            "splits, pacing, laps, or how even their effort was."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "activity_id": {
+                    "type": "integer",
+                    "description": "Strava activity ID to analyse splits for.",
+                }
+            },
+            "required": ["activity_id"],
+        },
+    },
+    {
+        "name": "log_wellness",
+        "description": (
+            "Log an injury, pain, soreness, or wellness concern. Call when the "
+            "athlete mentions any physical discomfort, injury, tightness, "
+            "fatigue, or wellness issue. Records the body part, severity, "
+            "and type for tracking over time."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "entry_type": {
+                    "type": "string",
+                    "description": (
+                        "Type of issue: pain, soreness, tightness, fatigue, "
+                        "swelling, numbness, or other."
+                    ),
+                },
+                "body_part": {
+                    "type": "string",
+                    "description": (
+                        "Affected body part, e.g. 'left knee', 'right calf'."
+                    ),
+                },
+                "severity": {
+                    "type": "integer",
+                    "description": "Severity 1-10 (1=mild, 10=severe).",
+                },
+                "notes": {
+                    "type": "string",
+                    "description": "Optional additional context.",
+                },
+            },
+            "required": ["entry_type", "body_part", "severity"],
+        },
+    },
+    {
+        "name": "check_wellness",
+        "description": (
+            "Check current wellness status: active issues, detected patterns, "
+            "or resolve an existing issue. Call when the athlete asks about "
+            "their injuries, wellness log, or says an issue is resolved."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "resolve_id": {
+                    "type": "string",
+                    "description": ("Entry ID to resolve (marks issue as resolved)."),
+                }
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "assess_readiness",
+        "description": (
+            "Assess the athlete's race readiness and goal progress. Analyses "
+            "VDOT predictions, volume benchmarks, long run coverage, CTL trend, "
+            "and returns an overall readiness rating. Call when the athlete asks "
+            "if they're ready for a race, on track for their goal, or how their "
+            "training is progressing toward a target."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "goal": {
+                    "type": "string",
+                    "description": (
+                        "Optional goal override, e.g. 'half marathon in 1:30h'. "
+                        "If omitted, uses the current training plan goal."
+                    ),
+                }
+            },
+            "required": [],
+        },
+    },
 ]
 
 
@@ -277,12 +403,23 @@ def execute_tools(msg: object) -> list:
 
                 indexed = index_activities(all_acts)
                 index_debriefs(load_debriefs())
+
+                from coach_utils.records import check_new_records
+
+                new_pbs = check_new_records(all_acts)
+
                 result = (
                     f"Sync complete. Activities cache updated "
                     f"({indexed} indexed to memory)."
                 )
                 if note:
                     result += f"\n\nNew activity analysis:\n{note}"
+                if new_pbs:
+                    pb_lines = [
+                        f"  New PB: {pb['category'].replace('_', ' ').title()}"
+                        for pb in new_pbs
+                    ]
+                    result += "\n\n" + "\n".join(pb_lines)
                 try:
                     from tgbot.telegram_send import _send_telegram_message
 
@@ -334,18 +471,16 @@ def execute_tools(msg: object) -> list:
             period_str = block.input.get("period", "")
             sport_key = block.input.get("sport", "run")
             breakdown = block.input.get("breakdown", "")
-            types = (
-                None if sport_key == "all" else types_for_key(sport_key)
-            )
+            types = None if sport_key == "all" else types_for_key(sport_key)
             acts = strava_sync._load_cached()
 
             if breakdown in ("month", "year"):
                 # Pre-filter by sport
                 if types:
                     acts = [
-                        a for a in acts
-                        if a.get("type") in types
-                        or a.get("sport_type") in types
+                        a
+                        for a in acts
+                        if a.get("type") in types or a.get("sport_type") in types
                     ]
                 # Optionally narrow by period
                 if period_str:
@@ -354,8 +489,7 @@ def execute_tools(msg: object) -> list:
                         s_str = parsed[0].isoformat()
                         e_str = parsed[1].isoformat()
                         acts = [
-                            a for a in acts
-                            if s_str <= a.get("date", "")[:10] <= e_str
+                            a for a in acts if s_str <= a.get("date", "")[:10] <= e_str
                         ]
                 key_len = 7 if breakdown == "month" else 4
                 groups: dict[str, dict] = defaultdict(
@@ -382,10 +516,7 @@ def execute_tools(msg: object) -> list:
                         f"{'s' if v['count'] != 1 else ''})"
                         for k, v in ranked[:12]
                     ]
-                    result = (
-                        f"Top {breakdown}s by distance:\n"
-                        + "\n".join(lines)
-                    )
+                    result = f"Top {breakdown}s by distance:\n" + "\n".join(lines)
             else:
                 parsed = parse_period(period_str) if period_str else None
                 if parsed is None:
@@ -433,7 +564,8 @@ def execute_tools(msg: object) -> list:
                     not workout_type_filter
                     or _WORKOUT_TYPE_LABELS.get(
                         a.get("workout_type") or 0, "default run"
-                    ) == workout_type_filter
+                    )
+                    == workout_type_filter
                 )
             ]
             filtered.sort(
@@ -469,9 +601,186 @@ def execute_tools(msg: object) -> list:
                     )
                 result = (
                     f"{len(acts)} activit{'y' if len(acts) == 1 else 'ies'}"
-                    f" found (sorted by {sort_by}).\n"
-                    + "\n".join(rows)
+                    f" found (sorted by {sort_by}).\n" + "\n".join(rows)
                 )
+        elif block.name == "check_records":
+            from coach_utils.records import scan_for_records
+
+            try:
+                acts = strava_sync._load_cached()
+                recs = scan_for_records(acts)
+                if not recs:
+                    result = "No personal records found — sync some activities first."
+                else:
+                    lines = ["Personal records:"]
+                    for key, val in recs.items():
+                        label = key.replace("_", " ").title()
+                        if "time_str" in val:
+                            lines.append(
+                                f"  {label}: {val['time_str']} ({val.get('date', '?')})"
+                            )
+                        elif "distance_km" in val:
+                            when = val.get(
+                                "date", val.get("week", val.get("month", "?"))
+                            )
+                            lines.append(
+                                f"  {label}: {val['distance_km']:.1f} km ({when})"
+                            )
+                        elif "days" in val:
+                            lines.append(f"  {label}: {val['days']} days")
+                    result = "\n".join(lines)
+            except Exception as e:
+                result = f"Records check failed: {e}"
+        elif block.name == "plan_adherence":
+            from coach_utils.adherence import calculate_adherence
+
+            weeks = int(block.input.get("weeks", 4))
+            try:
+                data = calculate_adherence(weeks)
+                honoured = data["rest_days_honoured"]
+                rest_total = data["rest_days_total"]
+                result = (
+                    f"Plan adherence ({weeks}wk): "
+                    f"{data['adherence_pct']:.0f}%\n"
+                    f"  Completed: {data['completed']}, "
+                    f"Partial: {data['partial']}, "
+                    f"Missed: {data['missed']}\n"
+                    f"  Rest days: {honoured}"
+                    f"/{rest_total} honoured"
+                )
+            except Exception as e:
+                result = f"Adherence check failed: {e}"
+        elif block.name == "analyse_splits":
+            from coach_utils.analyze import analyse_splits
+
+            activity_id = block.input.get("activity_id")
+            if not activity_id:
+                result = "activity_id is required."
+            else:
+                try:
+                    # Check cached activities first
+                    acts = strava_sync._load_cached()
+                    cached = next((a for a in acts if a["id"] == activity_id), None)
+                    if cached and cached.get("splits_metric"):
+                        split_data = analyse_splits(cached)
+                    else:
+                        # Fetch detail fields on demand
+                        detail = strava_sync._fetch_detail_fields(activity_id)
+                        act = cached.copy() if cached else {"id": activity_id}
+                        act["laps"] = detail["laps"]
+                        act["splits_metric"] = detail["splits_metric"]
+                        split_data = analyse_splits(act)
+
+                    if split_data["split_count"] == 0:
+                        result = "No split data available for this activity."
+                    else:
+                        pace_strs = []
+                        for p in split_data["split_paces"]:
+                            m, s = int(p // 60), int(p % 60)
+                            pace_strs.append(f"{m}:{s:02d}")
+                        mean_m = int(split_data["mean_pace_s"] // 60)
+                        mean_s = int(split_data["mean_pace_s"] % 60)
+                        result = (
+                            f"Split analysis ({split_data['split_count']} splits):\n"
+                            f"  Paces: {', '.join(pace_strs)}\n"
+                            f"  Mean: {mean_m}:{mean_s:02d}/km, "
+                            f"CV: {split_data['cv']:.1%}\n"
+                            f"  Flags: {', '.join(split_data['flags']) or 'none'}"
+                        )
+                except Exception as e:
+                    result = f"Split analysis failed: {e}"
+        elif block.name == "log_wellness":
+            from coach_utils.wellness import log_entry as wellness_log
+
+            entry_type = block.input.get("entry_type", "pain")
+            body_part = block.input.get("body_part", "")
+            severity = int(block.input.get("severity", 5))
+            notes = block.input.get("notes", "")
+            if not body_part:
+                result = "body_part is required."
+            else:
+                try:
+                    entry = wellness_log(entry_type, body_part, severity, notes)
+                    result = (
+                        f"Logged: {entry_type} in {body_part}, "
+                        f"severity {entry['severity']}/10. "
+                        f"ID: {entry['id']}"
+                    )
+                except Exception as e:
+                    result = f"Failed to log wellness entry: {e}"
+        elif block.name == "check_wellness":
+            from coach_utils.wellness import (
+                detect_patterns,
+                get_active_issues,
+                resolve_entry,
+            )
+
+            resolve_id = block.input.get("resolve_id", "")
+            if resolve_id:
+                ok = resolve_entry(resolve_id)
+                result = (
+                    f"Issue {resolve_id} resolved."
+                    if ok
+                    else f"Issue {resolve_id} not found."
+                )
+            else:
+                try:
+                    active = get_active_issues()
+                    patterns = detect_patterns()
+                    lines = []
+                    if active:
+                        lines.append(f"Active issues ({len(active)}):")
+                        for issue in active:
+                            lines.append(
+                                f"  [{issue['id']}] {issue['date']} \u2014 "
+                                f"{issue['type']} in {issue['body_part']}, "
+                                f"severity {issue['severity']}/10"
+                            )
+                    else:
+                        lines.append("No active wellness issues.")
+                    if patterns:
+                        lines.append(f"\nPatterns detected ({len(patterns)}):")
+                        for p in patterns:
+                            lines.append(
+                                f"  \u26a0 {p['type']}: {p['body_part']} \u2014 "
+                                f"{p['detail']}"
+                            )
+                    result = "\n".join(lines)
+                except Exception as e:
+                    result = f"Wellness check failed: {e}"
+        elif block.name == "assess_readiness":
+            from coach_utils.readiness import assess_readiness
+
+            goal_override = block.input.get("goal", "")
+            try:
+                data = assess_readiness(goal_override or None)
+                if data["overall"] == "insufficient_data":
+                    result = (
+                        "Insufficient data for readiness assessment. "
+                        "Set a training plan and sync some activities first."
+                    )
+                else:
+                    lines = [
+                        f"Race readiness: {data['overall'].replace('_', ' ').upper()}",
+                        f"Goal: {data['goal']}",
+                        f"Weekly avg: {data['weekly_avg_km']:.1f} km "
+                        f"({data['volume_status']})",
+                        f"Longest recent run: "
+                        f"{data['longest_recent_run_km']:.1f} km "
+                        f"({data['long_run_status']})",
+                        f"CTL: {data['ctl']:.1f} (trend: {data['ctl_trend']})",
+                    ]
+                    if data["vdot"]:
+                        lines.append(f"VDOT: {data['vdot']}")
+                    pos = data["signals"]["positive"]
+                    neg = data["signals"]["negative"]
+                    if pos:
+                        lines.append("Positive: " + "; ".join(pos))
+                    if neg:
+                        lines.append("Concerns: " + "; ".join(neg))
+                    result = "\n".join(lines)
+            except Exception as e:
+                result = f"Readiness assessment failed: {e}"
         else:
             result = f"Unknown tool: {block.name}"
         tool_results.append(

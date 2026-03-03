@@ -18,7 +18,7 @@ def _estimate_tss(activity: dict, lthr: float | None = None) -> float:
     avg_hr = activity.get("avg_hr")
     if avg_hr and lthr and lthr > 0:
         intensity_factor = avg_hr / lthr
-        tss = hours * intensity_factor ** 2 * 100
+        tss = hours * intensity_factor**2 * 100
         return min(tss, 300.0)
     dist_km = activity.get("distance_km", 0)
     return float(dist_km) * 6.0
@@ -41,9 +41,7 @@ def _get_lthr() -> float:
     return 170.0
 
 
-def calculate_load_metrics(
-    activities: list[dict], lthr: float | None = None
-) -> dict:
+def calculate_load_metrics(activities: list[dict], lthr: float | None = None) -> dict:
     """Calculate CTL, ATL, TSB using exponentially-weighted moving averages.
 
     CTL: 42-day constant (chronic training load).

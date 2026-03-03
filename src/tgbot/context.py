@@ -30,11 +30,9 @@ def _calculate_vdot(distance_km: float, time_s: float) -> float | None:
         return None
     t = time_s / 60  # minutes
     v = (distance_km * 1000) / t  # metres per minute
-    vo2 = -4.60 + 0.182258 * v + 0.000104 * v ** 2
+    vo2 = -4.60 + 0.182258 * v + 0.000104 * v**2
     pct_max = (
-        0.8
-        + 0.1894393 * math.exp(-0.012778 * t)
-        + 0.2989558 * math.exp(-0.1932605 * t)
+        0.8 + 0.1894393 * math.exp(-0.012778 * t) + 0.2989558 * math.exp(-0.1932605 * t)
     )
     if pct_max <= 0:
         return None
@@ -49,7 +47,7 @@ def _vdot_paces(vdot: float) -> dict[str, str]:
         target_vo2 = vdot * pct
         # -4.60 + 0.182258*v + 0.000104*v^2 = target_vo2
         a, b, c = 0.000104, 0.182258, -4.60 - target_vo2
-        disc = b ** 2 - 4 * a * c
+        disc = b**2 - 4 * a * c
         if disc < 0:
             return 0.0
         return (-b + math.sqrt(disc)) / (2 * a)
@@ -82,10 +80,14 @@ def _compute_goal_pace(goal: str) -> str | None:
         "marathon": 42.195,
         "half marathon": 21.0975,
         "half-marathon": 21.0975,
-        "10k": 10.0, "10km": 10.0,
-        "5k": 5.0, "5km": 5.0,
-        "15k": 15.0, "15km": 15.0,
-        "20k": 20.0, "20km": 20.0,
+        "10k": 10.0,
+        "10km": 10.0,
+        "5k": 5.0,
+        "5km": 5.0,
+        "15k": 15.0,
+        "15km": 15.0,
+        "20k": 20.0,
+        "20km": 20.0,
     }
     distance_km: float | None = None
     for name, km in sorted(distances.items(), key=lambda x: -len(x[0])):
@@ -175,7 +177,7 @@ def _build_static_context(sport_key: str = "run") -> str:
             lines.append(f"\nWeek {i + 1} ({phase}){marker}:")
             for s in sessions:
                 lines.append(
-                    f"  {s.get('date','')} — {s.get('type','')}: {s.get('description','')}"
+                    f"  {s.get('date', '')} — {s.get('type', '')}: {s.get('description', '')}"
                 )
     else:
         lines.append("\nNo training plan set.")
@@ -205,6 +207,26 @@ def _build_static_context(sport_key: str = "run") -> str:
                 lo_str = f"{lo // 60}:{lo % 60:02d}"
                 hi_str = f"{hi // 60}:{hi % 60:02d}"
                 lines.append(f"  {name}: {lo_str}–{hi_str}/km.")
+
+        # Cycling power zones
+        cycling = zones.get("cycling", {})
+        cycling_power = cycling.get("power_zones", {})
+        if cycling_power:
+            ftp = cycling.get("ftp", "?")
+            lines.append(f"\nCycling power zones (FTP: {ftp}W):")
+            for name, (lo, hi) in cycling_power.items():
+                lines.append(f"  {name}: {lo}–{hi}W.")
+
+        # Swimming pace zones
+        swimming = zones.get("swimming", {})
+        swim_paces = swimming.get("pace_zones", {})
+        if swim_paces:
+            css = swimming.get("css_per_100m", "?")
+            lines.append(f"\nSwimming pace zones (CSS: {css}s/100m):")
+            for name, (lo, hi) in swim_paces.items():
+                lo_str = f"{lo // 60}:{lo % 60:02d}"
+                hi_str = f"{hi // 60}:{hi % 60:02d}"
+                lines.append(f"  {name}: {lo_str}–{hi_str}/100m.")
     else:
         lines.append("\nNo training zones configured (run: just zones <maxhr>).")
 
@@ -219,6 +241,53 @@ def _build_static_context(sport_key: str = "run") -> str:
     spike = volume_spike_check(activities)
     if spike:
         lines.append(f"Volume warning: {spike}")
+
+    # Plan adherence
+    try:
+        from coach_utils.adherence import calculate_adherence
+
+        adherence = calculate_adherence(4)
+        lines.append(
+            f"\nPlan adherence (4 weeks): {adherence['adherence_pct']:.0f}% "
+            f"({adherence['completed']} completed, {adherence['partial']} partial, "
+            f"{adherence['missed']} missed)."
+        )
+    except Exception:
+        pass
+
+    # Personal records
+    try:
+        from coach_utils.records import load_records
+
+        recs = load_records()
+        if recs:
+            rec_parts = []
+            for key, val in recs.items():
+                label = key.replace("_", " ").title()
+                if "time_str" in val:
+                    rec_parts.append(f"{label}: {val['time_str']}")
+                elif "distance_km" in val:
+                    rec_parts.append(f"{label}: {val['distance_km']:.1f} km")
+                elif "days" in val:
+                    rec_parts.append(f"{label}: {val['days']} days")
+            lines.append(f"\nPersonal records: {'; '.join(rec_parts)}.")
+    except Exception:
+        pass
+
+    # Race readiness
+    try:
+        from coach_utils.readiness import assess_readiness
+
+        readiness = assess_readiness()
+        if readiness["overall"] != "insufficient_data":
+            lines.append(
+                f"\nRace readiness: {readiness['overall'].replace('_', ' ')} "
+                f"(weekly avg {readiness['weekly_avg_km']:.0f} km, "
+                f"CTL {readiness['ctl']:.0f}, "
+                f"trend: {readiness['ctl_trend']})."
+            )
+    except Exception:
+        pass
 
     # Today's session
     session = _today_session()
@@ -273,7 +342,9 @@ def _build_static_context(sport_key: str = "run") -> str:
                     if debrief
                     else ""
                 )
-                lines.append(f"  {date} — {name}: {dist:.1f} km @ {pace}/km{hr_str}{debrief_suffix}.")
+                lines.append(
+                    f"  {date} — {name}: {dist:.1f} km @ {pace}/km{hr_str}{debrief_suffix}."
+                )
 
         if older_acts:
             weeks_by_iso: dict[tuple[int, int], list[tuple]] = {}
@@ -287,12 +358,16 @@ def _build_static_context(sport_key: str = "run") -> str:
             omitted = len(all_weeks) - len(display_weeks)
 
             lines.append("\nWeekly summaries (last 3 months):")
-            for (year, week) in display_weeks:
+            for year, week in display_weeks:
                 week_acts = [a for _, a in weeks_by_iso[(year, week)]]
                 total_km = sum(a.get("distance_km", 0) for a in week_acts)
                 total_s = sum(a.get("moving_time_s", 0) for a in week_acts)
                 hrs = [a["avg_hr"] for a in week_acts if a.get("avg_hr")]
-                pace_str = strava_sync.format_pace(total_km * 1000, total_s) if total_km > 0 else "N/A"
+                pace_str = (
+                    strava_sync.format_pace(total_km * 1000, total_s)
+                    if total_km > 0
+                    else "N/A"
+                )
                 hr_str = f", avg HR {sum(hrs) / len(hrs):.0f} bpm" if hrs else ""
                 week_start = datetime.fromisocalendar(year, week, 1).strftime("%b %d")
                 week_end = datetime.fromisocalendar(year, week, 7).strftime("%b %d")
@@ -314,15 +389,18 @@ def _build_static_context(sport_key: str = "run") -> str:
         best_vdot: float | None = None
         best_vdot_result: dict | None = None
         dist_map = {
-            "5k": 5.0, "5km": 5.0,
-            "10k": 10.0, "10km": 10.0,
-            "hm": 21.0975, "half marathon": 21.0975,
+            "5k": 5.0,
+            "5km": 5.0,
+            "10k": 10.0,
+            "10km": 10.0,
+            "hm": 21.0975,
+            "half marathon": 21.0975,
             "marathon": 42.195,
         }
         for r in results[:5]:
             event = r.get("event", "").lower()
             time_str = r.get("time", "")
-            lines.append(f"  {r.get('date','?')} {r.get('event','?')} — {time_str}.")
+            lines.append(f"  {r.get('date', '?')} {r.get('event', '?')} — {time_str}.")
             dist_km = next((v for k, v in dist_map.items() if k in event), None)
             if dist_km and time_str:
                 parts = time_str.split(":")
@@ -330,7 +408,9 @@ def _build_static_context(sport_key: str = "run") -> str:
                     if len(parts) == 2:
                         time_s = int(parts[0]) * 60 + float(parts[1])
                     elif len(parts) == 3:
-                        time_s = int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
+                        time_s = (
+                            int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
+                        )
                     else:
                         continue
                     v = _calculate_vdot(dist_km, time_s)
@@ -352,8 +432,7 @@ def _build_static_context(sport_key: str = "run") -> str:
     if len(result) > _MAX_CONTEXT_CHARS:
         logger.warning("System prompt too large (%d chars), trimming", len(result))
         result = (
-            result[:_MAX_CONTEXT_CHARS]
-            + "\n(… context truncated to fit token limit)"
+            result[:_MAX_CONTEXT_CHARS] + "\n(… context truncated to fit token limit)"
         )
     _context_cache[cache_key] = result
     _context_cache[ts_key] = datetime.now(tz=UTC).timestamp()
@@ -418,34 +497,47 @@ def _generate_plan_with_claude(goal: str) -> dict:
 
     # Pre-calculate target pace so the model never has to do the arithmetic
     pace_hint = _compute_goal_pace(goal)
-    pace_line = f"- Target race pace (pre-calculated, use exactly): {pace_hint}" if pace_hint else ""
+    pace_line = (
+        f"- Target race pace (pre-calculated, use exactly): {pace_hint}"
+        if pace_hint
+        else ""
+    )
 
     # Inject recent fitness data so the plan is anchored to actual form
     fitness_lines: list[str] = []
     try:
-        from strava_utils import pot10 as _pot10, strava_sync as _ss
+        from strava_utils import pot10 as _pot10
+        from strava_utils import strava_sync as _ss
 
         acts = _ss._load_cached()
         cutoff = (datetime.now(tz=UTC) - timedelta(days=56)).strftime("%Y-%m-%d")
         recent = [a for a in acts if a.get("date", "")[:10] >= cutoff]
         if recent:
             total_km = sum(a.get("distance_km", 0) for a in recent)
-            fitness_lines.append(f"Last 8 weeks: {len(recent)} runs, {total_km:.0f} km total.")
+            fitness_lines.append(
+                f"Last 8 weeks: {len(recent)} runs, {total_km:.0f} km total."
+            )
             fitness_lines.append("Recent sessions (newest first):")
             for a in recent[:10]:
                 hr = a.get("avg_hr")
                 hr_str = f", HR {hr:.0f}" if hr else ""
                 fitness_lines.append(
-                    f"  {a.get('date','')[:10]} — {a.get('distance_km',0):.1f}km @ {a.get('pace','N/A')}/km{hr_str}"
+                    f"  {a.get('date', '')[:10]} — {a.get('distance_km', 0):.1f}km @ {a.get('pace', 'N/A')}/km{hr_str}"
                 )
         results = _pot10._load_results()
         if results:
             fitness_lines.append("Race results:")
             for r in results[:5]:
-                fitness_lines.append(f"  {r.get('date','?')} {r.get('event','?')} — {r.get('time','?')}")
+                fitness_lines.append(
+                    f"  {r.get('date', '?')} {r.get('event', '?')} — {r.get('time', '?')}"
+                )
     except Exception:
         pass
-    fitness_context = "\n".join(fitness_lines) if fitness_lines else "No recent activity data available."
+    fitness_context = (
+        "\n".join(fitness_lines)
+        if fitness_lines
+        else "No recent activity data available."
+    )
 
     system_prompt = f"""You are an expert running coach who generates training plans.
 Today's date is {today}.
@@ -485,7 +577,9 @@ Rules:
         message = client.messages.create(
             model=CLAUDE_MODEL,
             max_tokens=4096,
-            messages=[{"role": "user", "content": f"Create a training plan for: {goal}"}],
+            messages=[
+                {"role": "user", "content": f"Create a training plan for: {goal}"}
+            ],
             system=system_prompt,
         )
         raw = message.content[0].text.strip()
@@ -495,7 +589,9 @@ Rules:
     # Strip accidental markdown fences
     if raw.startswith("```"):
         raw_lines = raw.splitlines()
-        raw = "\n".join(raw_lines[1:-1] if raw_lines[-1].strip() == "```" else raw_lines[1:])
+        raw = "\n".join(
+            raw_lines[1:-1] if raw_lines[-1].strip() == "```" else raw_lines[1:]
+        )
 
     try:
         plan = json.loads(raw)

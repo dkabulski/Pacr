@@ -116,15 +116,40 @@ def _find_prescribed_session(plan: dict, activity_date: str) -> dict | None:
     return None
 
 
+# Sport type mapping
+_RUN_TYPES = {"Run", "VirtualRun", "TrailRun"}
+_RIDE_TYPES = {"Ride", "VirtualRide", "MountainBikeRide", "EBikeRide", "GravelRide"}
+_SWIM_TYPES = {"Swim"}
+_HIKE_TYPES = {"Hike", "Walk"}
+
+
 def _analyze_activity(activity: dict) -> dict:
-    """Analyse a single activity against zones and plan."""
+    """Analyse a single activity — routes to sport-specific analyser."""
+    sport = activity.get("type", "Run")
     zones_data = _load_json(_zones_path())
     plan_data = _load_json(_plan_path())
 
+    if sport in _RIDE_TYPES:
+        return _analyze_ride(activity, zones_data)
+    elif sport in _SWIM_TYPES:
+        return _analyze_swim(activity, zones_data)
+    elif sport in _HIKE_TYPES:
+        return _analyze_hike(activity, zones_data)
+    else:
+        return _analyze_run(activity, zones_data, plan_data)
+
+
+def _analyze_run(
+    activity: dict,
+    zones_data: dict | list | None,
+    plan_data: dict | list | None,
+) -> dict:
+    """Analyse a running activity against zones and plan."""
     analysis: dict = {
         "activity_id": activity["id"],
         "name": activity.get("name", ""),
         "date": activity.get("date", ""),
+        "sport": "run",
         "distance_km": activity.get("distance_km", 0),
         "moving_time_s": activity.get("moving_time_s", 0),
         "pace": activity.get("pace", "N/A"),
@@ -185,6 +210,210 @@ def _analyze_activity(activity: dict) -> dict:
         )
 
     return analysis
+
+
+def _analyze_ride(activity: dict, zones_data: dict | list | None) -> dict:
+    """Analyse a cycling activity — power zones, speed, cadence."""
+    distance_km = activity.get("distance_km", 0)
+    moving_time_s = activity.get("moving_time_s", 0)
+    speed_kmh = (distance_km / (moving_time_s / 3600)) if moving_time_s > 0 else 0
+
+    analysis: dict = {
+        "activity_id": activity["id"],
+        "name": activity.get("name", ""),
+        "date": activity.get("date", ""),
+        "sport": "ride",
+        "distance_km": distance_km,
+        "moving_time_s": moving_time_s,
+        "speed_kmh": round(speed_kmh, 1),
+        "elevation_m": activity.get("elevation_m", 0),
+        "avg_cadence": activity.get("avg_cadence"),
+        "flags": [],
+        "recommendations": [],
+    }
+
+    # HR analysis
+    avg_hr = activity.get("avg_hr")
+    if avg_hr and zones_data and "hr_zones" in zones_data:
+        hr_zone = classify_hr_zone(avg_hr, zones_data["hr_zones"])
+        analysis["hr_zone"] = hr_zone
+        analysis["avg_hr"] = avg_hr
+
+    # Power zones (if configured)
+    if zones_data and "cycling" in zones_data:
+        power_zones = zones_data["cycling"].get("power_zones", {})
+        if power_zones:
+            analysis["power_zones_configured"] = True
+
+    return analysis
+
+
+def _analyze_hike(activity: dict, zones_data: dict | list | None) -> dict:
+    """Analyse a hiking activity — elevation gain/km, rest ratio."""
+    distance_km = activity.get("distance_km", 0)
+    elevation_m = activity.get("elevation_m", 0)
+    moving_time_s = activity.get("moving_time_s", 0)
+    elapsed_time_s = activity.get("elapsed_time_s", moving_time_s)
+    elev_per_km = (elevation_m / distance_km) if distance_km > 0 else 0
+    rest_ratio = (
+        (elapsed_time_s - moving_time_s) / elapsed_time_s if elapsed_time_s > 0 else 0
+    )
+
+    analysis: dict = {
+        "activity_id": activity["id"],
+        "name": activity.get("name", ""),
+        "date": activity.get("date", ""),
+        "sport": "hike",
+        "distance_km": distance_km,
+        "moving_time_s": moving_time_s,
+        "elevation_m": elevation_m,
+        "elevation_per_km": round(elev_per_km, 1),
+        "rest_ratio": round(rest_ratio, 3),
+        "flags": [],
+        "recommendations": [],
+    }
+
+    # HR analysis
+    avg_hr = activity.get("avg_hr")
+    if avg_hr and zones_data and "hr_zones" in zones_data:
+        hr_zone = classify_hr_zone(avg_hr, zones_data["hr_zones"])
+        analysis["hr_zone"] = hr_zone
+        analysis["avg_hr"] = avg_hr
+
+    return analysis
+
+
+def _analyze_swim(activity: dict, zones_data: dict | list | None) -> dict:
+    """Analyse a swimming activity — pace per 100m, CSS zones."""
+    distance_m = activity.get("distance_m", 0)
+    moving_time_s = activity.get("moving_time_s", 0)
+    pace_per_100m = (moving_time_s / (distance_m / 100)) if distance_m > 0 else 0
+
+    analysis: dict = {
+        "activity_id": activity["id"],
+        "name": activity.get("name", ""),
+        "date": activity.get("date", ""),
+        "sport": "swim",
+        "distance_m": distance_m,
+        "distance_km": activity.get("distance_km", 0),
+        "moving_time_s": moving_time_s,
+        "pace_per_100m_s": round(pace_per_100m, 1),
+        "flags": [],
+        "recommendations": [],
+    }
+
+    # Format pace per 100m as mm:ss
+    if pace_per_100m > 0:
+        m = int(pace_per_100m // 60)
+        s = int(pace_per_100m % 60)
+        analysis["pace_per_100m"] = f"{m}:{s:02d}"
+
+    # HR analysis
+    avg_hr = activity.get("avg_hr")
+    if avg_hr and zones_data and "hr_zones" in zones_data:
+        hr_zone = classify_hr_zone(avg_hr, zones_data["hr_zones"])
+        analysis["hr_zone"] = hr_zone
+        analysis["avg_hr"] = avg_hr
+
+    # CSS zones (if configured)
+    if zones_data and "swimming" in zones_data:
+        pace_zones = zones_data["swimming"].get("pace_zones", {})
+        if pace_zones:
+            analysis["css_zones_configured"] = True
+
+    return analysis
+
+
+def analyse_splits(activity: dict) -> dict:
+    """Analyse per-km splits for pacing patterns.
+
+    Returns dict with keys: split_count, split_paces, mean_pace_s,
+    cv (coefficient of variation), flags, lap_summary.
+    """
+    splits = activity.get("splits_metric", [])
+
+    if not splits:
+        return {
+            "split_count": 0,
+            "split_paces": [],
+            "mean_pace_s": 0,
+            "cv": 0,
+            "flags": [],
+            "lap_summary": [],
+        }
+
+    # Calculate pace in s/km for each split
+    split_paces: list[float] = []
+    for sp in splits:
+        dist = sp.get("distance_m", 0)
+        time_s = sp.get("moving_time_s", 0)
+        if dist > 0 and time_s > 0:
+            pace_s = time_s / (dist / 1000)
+            split_paces.append(round(pace_s, 1))
+
+    if not split_paces:
+        return {
+            "split_count": 0,
+            "split_paces": [],
+            "mean_pace_s": 0,
+            "cv": 0,
+            "flags": [],
+            "lap_summary": [],
+        }
+
+    mean_pace = sum(split_paces) / len(split_paces)
+    std_dev = (sum((p - mean_pace) ** 2 for p in split_paces) / len(split_paces)) ** 0.5
+    cv = std_dev / mean_pace if mean_pace > 0 else 0
+
+    flags: list[str] = []
+
+    # Detect pacing patterns (need at least 3 splits)
+    if len(split_paces) >= 3:
+        first_half = split_paces[: len(split_paces) // 2]
+        second_half = split_paces[len(split_paces) // 2 :]
+        avg_first = sum(first_half) / len(first_half)
+        avg_second = sum(second_half) / len(second_half)
+
+        # Negative split: second half faster (lower pace) by >2%
+        if avg_second < avg_first * 0.98:
+            flags.append("negative_split")
+        # Positive split: second half slower by >2%
+        elif avg_second > avg_first * 1.02:
+            flags.append("positive_split")
+
+        # Fast start: first split >5% faster than mean
+        if split_paces[0] < mean_pace * 0.95:
+            flags.append("fast_start")
+
+        # Fade: last 2 splits both >5% slower than mean
+        if all(p > mean_pace * 1.05 for p in split_paces[-2:]):
+            flags.append("fade")
+
+    # Consistent pacing: CV < 3%
+    if cv < 0.03:
+        flags.append("consistent_pacing")
+
+    # Lap summary
+    lap_summary = []
+    laps = activity.get("laps", [])
+    for i, lap in enumerate(laps):
+        lap_summary.append(
+            {
+                "lap": i + 1,
+                "distance_m": lap.get("distance_m", 0),
+                "pace": lap.get("pace", "N/A"),
+                "avg_hr": lap.get("avg_hr"),
+            }
+        )
+
+    return {
+        "split_count": len(split_paces),
+        "split_paces": split_paces,
+        "mean_pace_s": round(mean_pace, 1),
+        "cv": round(cv, 4),
+        "flags": flags,
+        "lap_summary": lap_summary,
+    }
 
 
 def latest() -> None:

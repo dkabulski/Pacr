@@ -17,7 +17,8 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from datetime import UTC, datetime, time as dt_time
+from datetime import UTC, datetime
+from datetime import time as dt_time
 from pathlib import Path
 
 # When run as a uv script, add src/ to sys.path so sibling modules resolve.
@@ -33,12 +34,14 @@ if os.environ.get("LOG_FORMAT") == "json":
 
     class _JsonFormatter(logging.Formatter):
         def format(self, record: logging.LogRecord) -> str:
-            return _json_log.dumps({
-                "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
-                "level": record.levelname,
-                "logger": record.name,
-                "msg": record.getMessage(),
-            })
+            return _json_log.dumps(
+                {
+                    "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+                    "level": record.levelname,
+                    "logger": record.name,
+                    "msg": record.getMessage(),
+                }
+            )
 
     _handler = logging.StreamHandler()
     _handler.setFormatter(_JsonFormatter())
@@ -98,12 +101,12 @@ from tgbot.handlers import (  # noqa: E402, F401
     _filter_by_sport,
     _heartbeat,
     _load_history,
-    morning_checkin,
     _load_settings,
     _run_analysis,
     _save_history,
     _save_settings,
     _validate_data_path,
+    cmd_adherence,
     cmd_analyse,
     cmd_clear,
     cmd_help,
@@ -121,6 +124,7 @@ from tgbot.handlers import (  # noqa: E402, F401
     cmd_today,
     cmd_week,
     cmd_zones,
+    morning_checkin,
 )
 from tgbot.km_query import (  # noqa: E402, F401
     SPORT_KEY_MAP,
@@ -133,8 +137,7 @@ from tgbot.km_query import (  # noqa: E402, F401
     sport_label,
     types_for_key,
 )
-
-from tgbot.telegram_send import (  # noqa: E402
+from tgbot.telegram_send import (  # noqa: E402, F401
     TELEGRAM_MAX_LENGTH,
     _get_bot_config,
     _send_telegram_message,
@@ -201,25 +204,28 @@ def bot() -> None:
     _load_settings(config)
 
     async def _register_commands(application: object) -> None:
-        await application.bot.set_my_commands([  # type: ignore[union-attr]
-            BotCommand("start",   "Show status overview"),
-            BotCommand("sync",    "Sync Strava activities"),
-            BotCommand("today",   "Today's planned session"),
-            BotCommand("week",    "This week vs plan"),
-            BotCommand("next",    "Next 5 planned sessions"),
-            BotCommand("last",    "Last activity detail"),
-            BotCommand("summary", "7-day stats"),
-            BotCommand("plan",    "Show full training plan"),
-            BotCommand("setplan", "Generate a new plan with AI"),
-            BotCommand("analyse", "Analyse last activity"),
-            BotCommand("reanalyse", "Re-analyse last activity on demand"),
-            BotCommand("load",    "Training load: CTL/ATL/TSB + weekly km"),
-            BotCommand("results", "Race results"),
-            BotCommand("zones",   "HR and pace zones"),
-            BotCommand("sport",   "Set activity type filter"),
-            BotCommand("clear",   "Clear conversation history"),
-            BotCommand("help",    "Show available commands"),
-        ])
+        await application.bot.set_my_commands(
+            [  # type: ignore[union-attr]
+                BotCommand("start", "Show status overview"),
+                BotCommand("sync", "Sync Strava activities"),
+                BotCommand("today", "Today's planned session"),
+                BotCommand("week", "This week vs plan"),
+                BotCommand("next", "Next 5 planned sessions"),
+                BotCommand("last", "Last activity detail"),
+                BotCommand("summary", "7-day stats"),
+                BotCommand("plan", "Show full training plan"),
+                BotCommand("setplan", "Generate a new plan with AI"),
+                BotCommand("analyse", "Analyse last activity"),
+                BotCommand("reanalyse", "Re-analyse last activity on demand"),
+                BotCommand("load", "Training load: CTL/ATL/TSB + weekly km"),
+                BotCommand("results", "Race results"),
+                BotCommand("zones", "HR and pace zones"),
+                BotCommand("adherence", "Plan adherence score"),
+                BotCommand("sport", "Set activity type filter"),
+                BotCommand("clear", "Clear conversation history"),
+                BotCommand("help", "Show available commands"),
+            ]
+        )
 
     logger.info(
         "Starting bot (chat_id=%s, poll_interval=%ss, analysis_delay=%ss)",
@@ -245,6 +251,7 @@ def bot() -> None:
     app.add_handler(CommandHandler("results", cmd_results, filters=chat_filter))
     app.add_handler(CommandHandler("zones", cmd_zones, filters=chat_filter))
     app.add_handler(CommandHandler("sport", cmd_sport, filters=chat_filter))
+    app.add_handler(CommandHandler("adherence", cmd_adherence, filters=chat_filter))
     app.add_handler(CommandHandler("clear", cmd_clear, filters=chat_filter))
     app.add_handler(CommandHandler("help", cmd_help, filters=chat_filter))
     app.add_handler(
@@ -291,9 +298,11 @@ def morning_briefing() -> None:
 
 
 if __name__ == "__main__":
-    fire.Fire({
-        "send": send,
-        "send_summary": send_summary,
-        "morning_briefing": morning_briefing,
-        "bot": bot,
-    })
+    fire.Fire(
+        {
+            "send": send,
+            "send_summary": send_summary,
+            "morning_briefing": morning_briefing,
+            "bot": bot,
+        }
+    )

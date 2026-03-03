@@ -6,7 +6,6 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # _estimate_tss
 # ---------------------------------------------------------------------------
@@ -72,7 +71,14 @@ def test_calculate_load_single_activity_today() -> None:
     from coach_utils.training_load import calculate_load_metrics
 
     today = datetime.now(tz=UTC).date().isoformat()
-    acts = [{"date": today + "T00:00:00Z", "moving_time_s": 3600, "avg_hr": 170.0, "distance_km": 10.0}]
+    acts = [
+        {
+            "date": today + "T00:00:00Z",
+            "moving_time_s": 3600,
+            "avg_hr": 170.0,
+            "distance_km": 10.0,
+        }
+    ]
     metrics = calculate_load_metrics(acts, lthr=170.0)
     # ATL uses 7-day constant → rises faster than CTL (42-day constant)
     assert metrics["atl"] > metrics["ctl"]
@@ -84,7 +90,14 @@ def test_calculate_load_old_activity_decays_to_zero() -> None:
 
     # Activity 400 days ago is outside the 365-day window → not counted
     old_date = (datetime.now(tz=UTC).date() - timedelta(days=400)).isoformat()
-    acts = [{"date": old_date + "T00:00:00Z", "moving_time_s": 3600, "avg_hr": 170.0, "distance_km": 10.0}]
+    acts = [
+        {
+            "date": old_date + "T00:00:00Z",
+            "moving_time_s": 3600,
+            "avg_hr": 170.0,
+            "distance_km": 10.0,
+        }
+    ]
     metrics = calculate_load_metrics(acts, lthr=170.0)
     assert metrics["ctl"] == 0.0
     assert metrics["atl"] == 0.0
@@ -96,9 +109,19 @@ def test_calculate_load_tsb_equals_ctl_minus_atl() -> None:
 
     today = datetime.now(tz=UTC).date().isoformat()
     acts = [
-        {"date": today + "T00:00:00Z", "moving_time_s": 3600, "avg_hr": 170.0, "distance_km": 10.0},
-        {"date": (datetime.now(tz=UTC).date() - timedelta(days=3)).isoformat() + "T00:00:00Z",
-         "moving_time_s": 2700, "avg_hr": 155.0, "distance_km": 8.0},
+        {
+            "date": today + "T00:00:00Z",
+            "moving_time_s": 3600,
+            "avg_hr": 170.0,
+            "distance_km": 10.0,
+        },
+        {
+            "date": (datetime.now(tz=UTC).date() - timedelta(days=3)).isoformat()
+            + "T00:00:00Z",
+            "moving_time_s": 2700,
+            "avg_hr": 155.0,
+            "distance_km": 8.0,
+        },
     ]
     metrics = calculate_load_metrics(acts, lthr=170.0)
     assert metrics["tsb"] == pytest.approx(metrics["ctl"] - metrics["atl"], abs=0.2)
@@ -129,6 +152,7 @@ def test_weekly_km_trend_week_key_format() -> None:
 
     result = weekly_km_trend([], n_weeks=4)
     import re
+
     for w in result:
         assert re.match(r"^\d{4}-W\d{2}$", w["week"]), f"Bad format: {w['week']}"
 
