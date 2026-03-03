@@ -93,6 +93,19 @@ def _session_emoji(session_type: str) -> str:
     return _SESSION_EMOJI.get(session_type.lower(), "")
 
 
+def _session_line(session: dict, marker: str = "") -> str:
+    """Format a single session as a text line with optional marker."""
+    stype = session.get("type", "")
+    date = session.get("date", "")
+    desc = session.get("description", "")
+    emoji = _session_emoji(stype)
+    prefix = f"{emoji} " if emoji else ""
+    km = session.get("distance_km")
+    km_str = f" — {km:.0f} km" if km else ""
+    lead = f"{marker} " if marker else "  "
+    return f"{lead}{date} — {prefix}{stype}: {desc}{km_str}"
+
+
 # ---------------------------------------------------------------------------
 # HTML formatters
 # ---------------------------------------------------------------------------
@@ -160,14 +173,9 @@ def _format_plan_summary(plan: dict) -> str:
         phase = week.get("phase", "")
         lines.append(f"\n<b>Week {idx + 1}</b>" + (f" ({phase})" if phase else ""))
         for session in week.get("sessions", []):
-            stype = session.get("type", "")
-            if stype == "rest":
+            if session.get("type") == "rest":
                 continue
-            date = session.get("date", "")
-            desc = session.get("description", "")
-            emoji = _session_emoji(stype)
-            prefix = f"{emoji} " if emoji else ""
-            lines.append(f"  {date} — {prefix}{stype}: {desc}")
+            lines.append(_session_line(session))
 
     return "\n".join(lines)
 
@@ -217,13 +225,9 @@ def _format_week_by_number(week_num: int) -> str:
     header = f"<b>Week {week_num}</b>" + (f" — {phase}" if phase else "")
     lines = [header]
     for session in sessions:
-        stype = session.get("type", "")
-        if stype == "rest":
+        if session.get("type") == "rest":
             continue
         date = session.get("date", "")
-        desc = session.get("description", "")
-        emoji = _session_emoji(stype)
-        prefix = f"{emoji} " if emoji else ""
         if date in done_dates:
             marker = "✓"
         elif date < today_str:
@@ -232,7 +236,7 @@ def _format_week_by_number(week_num: int) -> str:
             marker = "→"
         else:
             marker = "·"
-        lines.append(f"{marker} {date} — {prefix}{stype}: {desc}")
+        lines.append(_session_line(session, marker))
 
     return "\n".join(lines)
 
@@ -368,11 +372,9 @@ def _format_week_vs_plan() -> str:
 
     lines = [f"<b>This Week (W{iso[1]})</b>"]
     for session in sorted(week_sessions, key=lambda s: s.get("date", "")):
-        stype = session.get("type", "")
-        if stype == "rest":
+        if session.get("type") == "rest":
             continue
         date = session.get("date", "")
-        desc = session.get("description", "")
         if date in done_dates:
             marker = "✓"
         elif date < today_str:
@@ -381,9 +383,7 @@ def _format_week_vs_plan() -> str:
             marker = "→"
         else:
             marker = "·"
-        emoji = _session_emoji(stype)
-        prefix = f"{emoji} " if emoji else ""
-        lines.append(f"{marker} {date} — {prefix}{stype}: {desc}")
+        lines.append(_session_line(session, marker))
     return "\n".join(lines)
 
 
@@ -411,15 +411,11 @@ def _format_next_sessions(n: int = 5) -> str:
 
     lines = ["<b>Upcoming Sessions</b>"]
     for session in upcoming:
-        stype = session.get("type", "")
-        if stype == "rest":
+        if session.get("type") == "rest":
             continue
         date = session.get("date", "")
-        desc = session.get("description", "")
-        emoji = _session_emoji(stype)
-        prefix = f"{emoji} " if emoji else ""
         marker = "→" if date == today_str else "·"
-        lines.append(f"{marker} {date} — {prefix}{stype}: {desc}")
+        lines.append(_session_line(session, marker))
     return "\n".join(lines)
 
 
