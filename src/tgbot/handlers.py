@@ -13,6 +13,7 @@ from pathlib import Path
 
 from tgbot.context import (
     CLAUDE_MODEL,
+    _edit_week_with_claude,
     _generate_plan_with_claude,
 )
 from tgbot.debrief import parse_rpe, save_debrief
@@ -585,6 +586,35 @@ async def cmd_plan_overview(update: object, context: object) -> None:
     await update.message.reply_text(text, parse_mode="HTML")  # type: ignore[union-attr]
 
 
+async def cmd_edit_week(update: object, context: object) -> None:
+    args = context.args  # type: ignore[union-attr]
+    if not args or not args[0].isdigit() or len(args) < 2:
+        await update.message.reply_text(  # type: ignore[union-attr]
+            "Usage: /editweek &lt;N&gt; &lt;instruction&gt;\n"
+            "e.g. <code>/editweek 5 add an extra tempo session on Wednesday</code>\n"
+            "     <code>/editweek 4 remove the Thursday run — I'm on holiday</code>",
+            parse_mode="HTML",
+        )
+        return
+
+    week_num = int(args[0])
+    instruction = " ".join(args[1:])
+    await update.message.reply_text(  # type: ignore[union-attr]
+        f"Updating week {week_num}..."
+    )
+
+    try:
+        await asyncio.to_thread(_edit_week_with_claude, week_num, instruction)
+    except Exception as e:
+        await update.message.reply_text(f"Failed to update week: {e}")  # type: ignore[union-attr]
+        return
+
+    text = await asyncio.to_thread(_format_week_by_number, week_num)
+    await update.message.reply_text(  # type: ignore[union-attr]
+        f"Week {week_num} updated.\n\n{text}", parse_mode="HTML"
+    )
+
+
 async def cmd_next(update: object, context: object) -> None:
     text = await asyncio.to_thread(_format_next_sessions)
     await update.message.reply_text(text, parse_mode="HTML")  # type: ignore[union-attr]
@@ -657,6 +687,7 @@ async def cmd_help(update: object, context: object) -> None:
         "/summary — Last 7 days: distance, time, pace\n"
         "/plan — Current week of training plan\n"
         "/planview — Week-by-week plan overview with km totals\n"
+        "/editweek &lt;N&gt; &lt;instruction&gt; — Edit a specific week\n"
         "/setplan &lt;goal&gt; [--days=N] [--max-km=N] — Generate a new plan\n"
         "    e.g. <code>/setplan half marathon April 3 2026 in 1:21h"
         " --days=5 --max-km=70</code>\n"

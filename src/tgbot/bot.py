@@ -88,6 +88,7 @@ from tgbot.handlers import (  # noqa: E402, F401
     cmd_adherence,
     cmd_analyse,
     cmd_clear,
+    cmd_edit_week,
     cmd_help,
     cmd_last,
     cmd_load,
@@ -195,6 +196,7 @@ def bot() -> None:
                 BotCommand("summary", "7-day stats"),
                 BotCommand("plan", "Show current week of training plan"),
                 BotCommand("planview", "Week-by-week plan overview with km totals"),
+                BotCommand("editweek", "Edit a specific week with natural language"),
                 BotCommand("setplan", "Generate a new plan with AI"),
                 BotCommand("analyse", "Analyse last activity"),
                 BotCommand("reanalyse", "Re-analyse last activity on demand"),
@@ -226,6 +228,7 @@ def bot() -> None:
     app.add_handler(CommandHandler("summary", cmd_summary, filters=chat_filter))
     app.add_handler(CommandHandler("plan", cmd_plan, filters=chat_filter))
     app.add_handler(CommandHandler("planview", cmd_plan_overview, filters=chat_filter))
+    app.add_handler(CommandHandler("editweek", cmd_edit_week, filters=chat_filter))
     app.add_handler(CommandHandler("setplan", cmd_setplan, filters=chat_filter))
     app.add_handler(CommandHandler("analyse", cmd_analyse, filters=chat_filter))
     app.add_handler(CommandHandler("reanalyse", cmd_analyse, filters=chat_filter))

@@ -643,3 +643,89 @@ Rules:
         raise RuntimeError("Claude plan is missing a valid 'weeks' array.")
 
     return plan
+
+
+def _edit_week_with_claude(week_num: int, instruction: str) -> dict:
+    """Modify a specific plan week in-place using a natural-language instruction.
+
+    Args:
+        week_num: 1-based week index.
+        instruction: Natural-language edit, e.g. "add a tempo on Wednesday".
+
+    Returns:
+        The updated week dict (already saved to disk).
+
+    Raises:
+        RuntimeError: If the plan is missing, the week is out of range, the
+            API call fails, or the response cannot be parsed.
+    """
+    import anthropic
+
+    from coach_utils import plan as plan_mod
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY not set.")
+
+    p = plan_mod._load_plan()
+    if not p:
+        raise RuntimeError("No training plan set.")
+
+    weeks = p.get("weeks", [])
+    if week_num < 1 or week_num > len(weeks):
+        raise RuntimeError(f"Week {week_num} not found — plan has {len(weeks)} weeks.")
+
+    week = weeks[week_num - 1]
+
+    system_prompt = """\
+You are an expert running coach modifying one week of a training plan.
+Return only the modified sessions array as raw JSON — no prose, no markdown fences.
+Rules:
+- Preserve all unaffected sessions exactly as given
+  (date, type, description, distance_km)
+- Keep exactly 7 entries per week (training days + rest days must sum to 7)
+- Set distance_km on every non-rest session
+- Use British English in descriptions"""
+
+    user_msg = (
+        f"Week {week_num} sessions (current):\n"
+        f"{json.dumps(week['sessions'], indent=2)}\n\n"
+        f"Instruction: {instruction}\n\n"
+        "Return the modified sessions array as raw JSON only."
+    )
+
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=4096,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_msg}],
+        )
+        if message.stop_reason == "max_tokens":
+            raise RuntimeError(
+                "Claude hit the token limit — try a simpler instruction."
+            )
+        raw = message.content[0].text.strip()
+    except RuntimeError:
+        raise
+    except Exception as e:
+        raise RuntimeError(f"Claude API error: {e}") from e
+
+    if raw.startswith("```"):
+        raw_lines = raw.splitlines()
+        raw = "\n".join(
+            raw_lines[1:-1] if raw_lines[-1].strip() == "```" else raw_lines[1:]
+        )
+
+    try:
+        sessions = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"Claude returned invalid JSON: {e}") from e
+
+    if not isinstance(sessions, list):
+        raise RuntimeError("Expected a sessions array from Claude.")
+
+    p["weeks"][week_num - 1]["sessions"] = sessions
+    plan_mod._save_plan(p)
+    return p["weeks"][week_num - 1]
