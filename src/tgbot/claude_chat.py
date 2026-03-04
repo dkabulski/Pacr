@@ -264,10 +264,14 @@ TOOLS = [
     {
         "name": "log_wellness",
         "description": (
-            "Log an injury, pain, soreness, or wellness concern. Call when the "
-            "athlete mentions any physical discomfort, injury, tightness, "
-            "fatigue, or wellness issue. Records the body part, severity, "
-            "and type for tracking over time."
+            "Log an injury, pain, soreness, or wellness concern. "
+            "ONLY call this when the athlete is explicitly reporting a NEW "
+            "symptom in their current message — e.g. 'my knee is sore today' "
+            "or 'I felt a twinge in my calf'. "
+            "Do NOT call based on past memories, previous conversations, or "
+            "contextual mentions of body parts (e.g. 'I have hills on the way' "
+            "is NOT a wellness report). The athlete must be directly and "
+            "deliberately reporting a physical issue right now."
         ),
         "input_schema": {
             "type": "object",
@@ -855,5 +859,25 @@ def call_claude(api_key: str, history: list[dict], sport_key: str = "run") -> st
         )
 
     text = next((b.text for b in msg.content if hasattr(b, "text")), "")
+
+    # If Claude completed tool calls but returned no text, nudge it once.
+    if not text and rounds > 0:
+        logger.info("Claude returned no text after tool calls — nudging for response")
+        messages = [
+            *messages,
+            {"role": "assistant", "content": msg.content},
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "Please now answer my question."}],
+            },
+        ]
+        msg = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=1500,
+            system=cached_system,
+            messages=messages,
+        )
+        text = next((b.text for b in msg.content if hasattr(b, "text")), "")
+
     logger.info("Claude reply: %d chars, %d tool round(s)", len(text), rounds)
     return text
