@@ -93,6 +93,7 @@ from tgbot.handlers import (  # noqa: E402, F401
     cmd_last,
     cmd_load,
     cmd_message,
+    cmd_model,
     cmd_next,
     cmd_plan,
     cmd_plan_overview,
@@ -205,6 +206,7 @@ def bot() -> None:
                 BotCommand("zones", "HR and pace zones"),
                 BotCommand("adherence", "Plan adherence score"),
                 BotCommand("sport", "Set activity type filter"),
+                BotCommand("model", "Switch AI model (haiku/sonnet/opus)"),
                 BotCommand("clear", "Clear conversation history"),
                 BotCommand("help", "Show available commands"),
             ]
@@ -236,6 +238,7 @@ def bot() -> None:
     app.add_handler(CommandHandler("results", cmd_results, filters=chat_filter))
     app.add_handler(CommandHandler("zones", cmd_zones, filters=chat_filter))
     app.add_handler(CommandHandler("sport", cmd_sport, filters=chat_filter))
+    app.add_handler(CommandHandler("model", cmd_model, filters=chat_filter))
     app.add_handler(CommandHandler("adherence", cmd_adherence, filters=chat_filter))
     app.add_handler(CommandHandler("clear", cmd_clear, filters=chat_filter))
     app.add_handler(CommandHandler("help", cmd_help, filters=chat_filter))

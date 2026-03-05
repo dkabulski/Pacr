@@ -13,6 +13,9 @@ from pathlib import Path
 
 from tgbot.context import (
     CLAUDE_MODEL,
+    HAIKU_MODEL,
+    OPUS_MODEL,
+    SONNET_MODEL,
     _edit_week_with_claude,
     _generate_plan_with_claude,
 )
@@ -57,6 +60,7 @@ class BotConfig:
     pending_analysis: dict[int, dict] = field(default_factory=dict)
     rate_timestamps: dict[int, deque] = field(default_factory=dict)
     activity_type: str = "run"
+    chat_model: str = CLAUDE_MODEL
 
 
 # ---------------------------------------------------------------------------
@@ -120,6 +124,7 @@ def _load_settings(config: BotConfig) -> None:
     if path.exists():
         data = json.loads(path.read_text())
         config.activity_type = data.get("activity_type", "run")
+        config.chat_model = data.get("chat_model", CLAUDE_MODEL)
 
 
 def _save_settings(config: BotConfig) -> None:
@@ -128,7 +133,12 @@ def _save_settings(config: BotConfig) -> None:
 
     _token_utils.DATA_DIR.mkdir(parents=True, exist_ok=True)
     path = _token_utils.DATA_DIR / "settings.json"
-    path.write_text(json.dumps({"activity_type": config.activity_type}, indent=2))
+    path.write_text(
+        json.dumps(
+            {"activity_type": config.activity_type, "chat_model": config.chat_model},
+            indent=2,
+        )
+    )
 
 
 def _filter_by_sport(activities: list[dict], sport_key: str) -> list[dict]:
@@ -698,6 +708,7 @@ async def cmd_help(update: object, context: object) -> None:
         "/zones — HR and pace training zones\n"
         "/adherence [weeks] — Plan adherence score (default 4 weeks)\n"
         "/sport [type] — Set activity type filter (run/ride/hike/swim/walk/all)\n"
+        "/model [haiku|sonnet|opus] — Switch AI model for chat\n"
         "/clear — Clear conversation history\n"
         "/help — Show this help message"
     )
@@ -757,6 +768,41 @@ async def cmd_sport(update: object, context: object) -> None:
     await update.message.reply_text(  # type: ignore[union-attr]
         f"Activity filter set to <b>{key}</b> ({label}).\n"
         "/last, /summary, /load and /analyse now show only these activities.",
+        parse_mode="HTML",
+    )
+
+
+_MODEL_ALIASES: dict[str, str] = {
+    "haiku": HAIKU_MODEL,
+    "sonnet": SONNET_MODEL,
+    "opus": OPUS_MODEL,
+}
+
+
+async def cmd_model(update: object, context: object) -> None:
+    config = _cfg(context)
+    args = context.args  # type: ignore[union-attr]
+    if not args:
+        current = config.chat_model
+        label = next((k for k, v in _MODEL_ALIASES.items() if v == current), current)
+        await update.message.reply_text(  # type: ignore[union-attr]
+            f"Current model: <b>{label}</b> (<code>{current}</code>)\n"
+            "Change with: /model haiku | sonnet | opus",
+            parse_mode="HTML",
+        )
+        return
+    key = args[0].lower()
+    if key not in _MODEL_ALIASES:
+        await update.message.reply_text(  # type: ignore[union-attr]
+            f"Unknown model <code>{key}</code>. Valid options: haiku, sonnet, opus",
+            parse_mode="HTML",
+        )
+        return
+    config.chat_model = _MODEL_ALIASES[key]
+    await asyncio.to_thread(_save_settings, config)
+    await update.message.reply_text(  # type: ignore[union-attr]
+        f"Model switched to <b>{key}</b> (<code>{config.chat_model}</code>).\n"
+        "Note: plan generation always uses Sonnet regardless of this setting.",
         parse_mode="HTML",
     )
 
@@ -841,7 +887,7 @@ async def cmd_message(update: object, context: object) -> None:
 
     try:
         reply = await asyncio.to_thread(
-            call_claude, api_key, history, config.activity_type
+            call_claude, api_key, history, config.activity_type, config.chat_model
         )
     except Exception as e:
         logger.exception("Claude call failed")

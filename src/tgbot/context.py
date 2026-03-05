@@ -14,7 +14,13 @@ from .formatters import _today_session
 
 logger = logging.getLogger("pacr")
 
-CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
+HAIKU_MODEL = "claude-haiku-4-5-20251001"
+SONNET_MODEL = "claude-sonnet-4-6"
+OPUS_MODEL = "claude-opus-4-6"
+
+# Default conversational model — overridden per-user via /model command.
+# Heavy tasks (plan generation, week editing) always use SONNET_MODEL.
+CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", SONNET_MODEL)
 
 _context_cache: dict[str, object] = {}
 
@@ -607,7 +613,7 @@ Rules:
     try:
         client = anthropic.Anthropic(api_key=api_key)
         message = client.messages.create(
-            model=CLAUDE_MODEL,
+            model=SONNET_MODEL,
             max_tokens=16384,
             messages=[
                 {"role": "user", "content": f"Create a training plan for: {goal}"}
@@ -697,7 +703,7 @@ Rules:
     try:
         client = anthropic.Anthropic(api_key=api_key)
         message = client.messages.create(
-            model=CLAUDE_MODEL,
+            model=SONNET_MODEL,
             max_tokens=4096,
             system=system_prompt,
             messages=[{"role": "user", "content": user_msg}],

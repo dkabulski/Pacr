@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import logging
 
-from tgbot.context import CLAUDE_MODEL, _build_athlete_context
+from tgbot.context import (
+    CLAUDE_MODEL,
+    SONNET_MODEL,
+    _build_static_context,
+)
 from tgbot.handlers import (
     _BLOCKED_FILES,
     _auto_analyse_new_activities,
@@ -341,6 +345,7 @@ TOOLS = [
             },
             "required": [],
         },
+        "cache_control": {"type": "ephemeral"},
     },
 ]
 
@@ -797,18 +802,26 @@ def execute_tools(msg: object) -> list:
     return tool_results
 
 
-def call_claude(api_key: str, history: list[dict], sport_key: str = "run") -> str:
+def call_claude(
+    api_key: str,
+    history: list[dict],
+    sport_key: str = "run",
+    model: str | None = None,
+) -> str:
     """Run one full Claude conversation turn (with up to 5 tool-call rounds).
 
     Args:
         api_key: Anthropic API key.
         history: Conversation history (list of message dicts).
         sport_key: Active sport filter key (e.g. "run", "ride", "all").
+        model: Claude model ID to use. Defaults to CLAUDE_MODEL env var.
 
     Returns:
         The assistant's text reply.
     """
     import anthropic
+
+    active_model = model or CLAUDE_MODEL
 
     query = next(
         (
@@ -818,19 +831,35 @@ def call_claude(api_key: str, history: list[dict], sport_key: str = "run") -> st
         ),
         "",
     )
-    system_prompt = _build_athlete_context(sport_key=sport_key, query=query)
-    client = anthropic.Anthropic(api_key=api_key)
-    messages = list(history)
-    cached_system = [
+    # Block 1: large static context — cached (stable for ~60s between turns)
+    static_context = _build_static_context(sport_key=sport_key)
+    system: list[dict] = [
         {
             "type": "text",
-            "text": system_prompt,
+            "text": static_context,
             "cache_control": {"type": "ephemeral"},
         }
     ]
+    # Block 2: memory results — NOT cached (changes per query, tiny in size)
+    if query:
+        try:
+            from memory.store import query_memories
+
+            memories = query_memories(query, n_results=5)
+            if memories:
+                mem_lines = ["\nRelevant coaching notes from previous sessions:"]
+                for m in memories:
+                    mem_lines.append(f"  - {m['text']}")
+                system.append({"type": "text", "text": "\n".join(mem_lines)})
+        except Exception:
+            logger.warning("Failed to retrieve memories", exc_info=True)
+
+    client = anthropic.Anthropic(api_key=api_key)
+    messages = list(history)
+    cached_system = system
 
     msg = client.messages.create(
-        model=CLAUDE_MODEL,
+        model=active_model,
         max_tokens=1500,
         system=cached_system,
         messages=messages,
@@ -851,7 +880,7 @@ def call_claude(api_key: str, history: list[dict], sport_key: str = "run") -> st
             {"role": "user", "content": tool_results},
         ]
         msg = client.messages.create(
-            model=CLAUDE_MODEL,
+            model=active_model,
             max_tokens=1500,
             system=cached_system,
             messages=messages,
@@ -872,7 +901,7 @@ def call_claude(api_key: str, history: list[dict], sport_key: str = "run") -> st
             },
         ]
         msg = client.messages.create(
-            model=CLAUDE_MODEL,
+            model=active_model,
             max_tokens=1500,
             system=cached_system,
             messages=messages,
