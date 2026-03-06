@@ -199,6 +199,20 @@ def _analyze_run(
                     "Slow down on easy days. "
                     "Easy effort should feel comfortable and conversational."
                 )
+
+        # Flag quality sessions done too easy
+        if prescribed_type in ("tempo", "intervals", "long", "race"):
+            hr_zone = analysis.get("hr_zone", {})
+            zone = hr_zone.get("zone", "")
+            if zone in ("zone1", "zone2", "below_zone1"):
+                analysis["flags"].append(
+                    f"{prescribed_type.title()} session done in "
+                    f"{hr_zone.get('label', zone)} — too easy"
+                )
+                analysis["recommendations"].append(
+                    f"{prescribed_type.title()} sessions require sustained effort. "
+                    "Half-hearted quality work is worse than rest."
+                )
     else:
         analysis["prescribed"] = None
 

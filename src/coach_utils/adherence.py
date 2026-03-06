@@ -14,9 +14,13 @@ logger = logging.getLogger("pacr")
 def is_close_enough(
     prescribed_km: float, actual_km: float, tolerance: float = 0.20
 ) -> bool:
-    """Check if actual distance is within tolerance of prescribed distance."""
+    """Check if actual distance is within tolerance of prescribed distance.
+
+    When no distance is prescribed (prescribed_km == 0), any activity counts
+    as completed.  Rest-day compliance is handled separately by the caller.
+    """
     if prescribed_km <= 0:
-        return actual_km <= 1.0  # rest day compliance
+        return actual_km > 0
     return abs(actual_km - prescribed_km) / prescribed_km <= tolerance
 
 

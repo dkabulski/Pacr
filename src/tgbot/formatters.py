@@ -699,8 +699,8 @@ def _format_countdown() -> str:
     if not weeks:
         return "Training plan has no weeks."
 
-    today_str = datetime.now(tz=UTC).strftime("%Y-%m-%d")
-    today = date_cls.fromisoformat(today_str)
+    today = datetime.now(tz=UTC).date()
+    today_str = today.isoformat()
 
     all_dates = [
         s.get("date", "")
