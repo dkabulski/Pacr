@@ -91,12 +91,12 @@ from tgbot.handlers import (  # noqa: E402, F401
     cmd_clear,
     cmd_countdown,
     cmd_edit_week,
-    cmd_motivation,
     cmd_help,
     cmd_last,
     cmd_load,
     cmd_message,
     cmd_model,
+    cmd_motivation,
     cmd_next,
     cmd_pace,
     cmd_plan,
@@ -305,16 +305,19 @@ def bot() -> None:
                 len(new_act_ids),
             )
             existing = cfg.pending_analysis.get(cid)
-            merged = list(set(list(new_act_ids) + (existing or {}).get("new_act_ids", [])))
+            existing_ids = (existing or {}).get("new_act_ids", [])
+            merged = list(set(list(new_act_ids) + existing_ids))
             if existing:
                 for job in context.job_queue.get_jobs_by_name(existing["job_name"]):  # type: ignore[union-attr]
                     job.schedule_removal()
-            job_name = f"webhook_{list(new_act_ids)[0]}"
+            job_name = f"webhook_{next(iter(new_act_ids))}"
             cfg.pending_analysis[cid] = {"job_name": job_name, "new_act_ids": merged}
             await context.bot.send_message(  # type: ignore[union-attr]
                 chat_id=cfg.chat_id,
-                text=f"<b>Strava webhook:</b> {len(new_act_ids)} new activity event(s). "
-                f"Analysing in {STRAVA_ANALYSIS_DELAY // 60} min…",
+                text=(
+                    f"<b>Strava webhook:</b> {len(new_act_ids)} new activity event(s). "
+                    f"Analysing in {STRAVA_ANALYSIS_DELAY // 60} min\u2026"
+                ),
                 parse_mode="HTML",
             )
             context.job_queue.run_once(  # type: ignore[union-attr]

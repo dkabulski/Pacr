@@ -6,7 +6,6 @@ import logging
 
 from tgbot.context import (
     CLAUDE_MODEL,
-    SONNET_MODEL,
     _build_static_context,
 )
 from tgbot.handlers import (

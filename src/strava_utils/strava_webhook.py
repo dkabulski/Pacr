@@ -120,7 +120,7 @@ def serve(port: int = 8001, verify_token: str = "pacr_verify") -> None:
     """
 
     class _Handler(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:  # noqa: N802
+        def do_GET(self) -> None:
             parsed = urlparse(self.path)
             params = parse_qs(parsed.query)
             mode = params.get("hub.mode", [""])[0]
@@ -137,7 +137,7 @@ def serve(port: int = 8001, verify_token: str = "pacr_verify") -> None:
                 self.send_response(403)
                 self.end_headers()
 
-        def do_POST(self) -> None:  # noqa: N802
+        def do_POST(self) -> None:
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length)
             try:
@@ -156,7 +156,7 @@ def serve(port: int = 8001, verify_token: str = "pacr_verify") -> None:
                 self.send_response(500)
                 self.end_headers()
 
-        def log_message(self, fmt: str, *args: object) -> None:  # noqa: N802
+        def log_message(self, fmt: str, *args: object) -> None:
             logger.debug("Webhook HTTP: " + fmt, *args)
 
     server = HTTPServer(("", port), _Handler)
@@ -174,10 +174,10 @@ def _append_event(event: dict) -> None:
     _token_utils.DATA_DIR.mkdir(parents=True, exist_ok=True)
     events: list[dict] = []
     if _EVENTS_FILE.exists():
-        try:
+        import contextlib
+
+        with contextlib.suppress(Exception):
             events = json.loads(_EVENTS_FILE.read_text())
-        except Exception:
-            pass
     events.append(event)
     _EVENTS_FILE.write_text(json.dumps(events, indent=2))
 

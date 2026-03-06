@@ -506,8 +506,8 @@ def _sparkline(values: list[float]) -> str:
 def _sparkline2(values: list[float]) -> tuple[str, str]:
     """Return a 2-row tall sparkline as (top_row, bottom_row), bottom-anchored.
 
-    Each column is split at 50% of max: the bottom row covers 0–50% and the
-    top row covers 50–100%, so every bar grows upward from the baseline.
+    Each column is split at 50% of max: the bottom row covers 0-50% and the
+    top row covers 50-100%, so every bar grows upward from the baseline.
     """
     if not values:
         return "", ""
@@ -517,7 +517,7 @@ def _sparkline2(values: list[float]) -> tuple[str, str]:
     top: list[str] = []
     bot: list[str] = []
     for v in values:
-        f = v / max_v  # 0.0–1.0
+        f = v / max_v  # 0.0-1.0
         if f < 0.5:
             bot.append(chars[round(f / 0.5 * n)])
             top.append(" ")
@@ -687,8 +687,9 @@ def _format_pace_calc(
 
 def _format_countdown() -> str:
     """Format race countdown from today to the last date in the training plan."""
-    from coach_utils import plan as plan_mod
     from datetime import date as date_cls
+
+    from coach_utils import plan as plan_mod
 
     p = plan_mod._load_plan()
     if not p:
@@ -734,7 +735,7 @@ def _format_countdown() -> str:
     if days_to_go < 0:
         lines.append(f"Race day was {abs(days_to_go)} days ago.")
     elif days_to_go == 0:
-        lines.append(f"Race day is <b>today</b>! Good luck!")
+        lines.append("Race day is <b>today</b>! Good luck!")
     else:
         weeks_left = days_to_go // 7
         days_rem = days_to_go % 7

@@ -703,23 +703,53 @@ async def cmd_clear(update: object, context: object) -> None:
 _FALLBACK_QUOTES = [
     '"Iron sharpens iron. Biscuits sharpen nothing." — Coach T. Rigby, 1994',
     '"Somewhere a Kenyan is warming up. You are already behind." — Anonymous',
-    '"The only bad run is the one where you checked your watch and then sat down." — D. Hutchins',
-    '"Two types of pain: the pain of discipline, and the pain of explaining your DNF." — R. Oswald',
-    '"Your legs are not giving out. Your brain is giving up. Evict it." — Coach O. Leary',
+    (
+        '"The only bad run is the one where you checked your watch'
+        ' and then sat down." — D. Hutchins'
+    ),
+    (
+        '"Two types of pain: the pain of discipline, and the pain'
+        ' of explaining your DNF." — R. Oswald'
+    ),
+    (
+        '"Your legs are not giving out. Your brain is giving up.'
+        ' Evict it." — Coach O. Leary'
+    ),
     '"Sweat is just weakness evaporating and leaving a damp patch." — G. Mercer',
-    '"The finish line is just the start line of your excuses." — P. Dunne, Athletics Monthly',
+    (
+        '"The finish line is just the start line of your excuses."'
+        ' — P. Dunne, Athletics Monthly'
+    ),
     '"You can rest when you\'re DNS." — M. Wills, Track & Field Quarterly',
     '"A 10k does not care how busy you were last week." — Coach B. Stanton',
     '"The treadmill is not running. You are just failing to escape." — J. Carmichael',
-    '"Champions are made in the moments when they want to stop but don\'t have a good enough excuse." — F. Kimura',
+    (
+        '"Champions are made in the moments when they want to stop'
+        ' but don\'t have a good enough excuse." — F. Kimura'
+    ),
     '"Pain is temporary. Your Strava is forever." — Dr. A. Hollis',
-    '"The body achieves what the mind believes, unless the mind has been watching too much television." — Coach S. Nkosi',
-    '"No one ever looked back on a race and wished they had started slower." — E. Okafor, 2003 (disputed)',
+    (
+        '"The body achieves what the mind believes, unless the mind'
+        ' has been watching too much television." — Coach S. Nkosi'
+    ),
+    (
+        '"No one ever looked back on a race and wished they had'
+        ' started slower." — E. Okafor, 2003 (disputed)'
+    ),
     '"Fatigue is just fitness knocking loudly." — T. Lindqvist',
-    '"Easy days are the hardest days because they require humility, and you have very little." — Coach P. Reyes',
-    '"The marathon doesn\'t care about your personality." — R. Abara, Dublin Track Club',
+    (
+        '"Easy days are the hardest days because they require'
+        ' humility, and you have very little." — Coach P. Reyes'
+    ),
+    (
+        '"The marathon doesn\'t care about your personality."'
+        ' — R. Abara, Dublin Track Club'
+    ),
     '"Consistency is the enemy of excuses." — Coach H. Bergström',
-    '"Run easy until it feels easy, then run slightly less easy." — J. Osei, VDOT Research Unit',
+    (
+        '"Run easy until it feels easy, then run slightly less easy."'
+        ' — J. Osei, VDOT Research Unit'
+    ),
     '"The plan is not optional. The suffering is." — M. Farrant',
 ]
 
@@ -819,7 +849,8 @@ async def cmd_wellness(update: object, context: object) -> None:
             notes = " ".join(args[sev_idx + 1 :])
             if not body_part:
                 await update.message.reply_text(  # type: ignore[union-attr]
-                    "Please specify a body part, e.g. <code>/wellness left knee 6</code>",
+                    "Please specify a body part, "
+                    "e.g. <code>/wellness left knee 6</code>",
                     parse_mode="HTML",
                 )
                 return
@@ -959,7 +990,8 @@ async def cmd_predict(update: object, context: object) -> None:
             vdot = float(args[0])
         except ValueError:
             await update.message.reply_text(  # type: ignore[union-attr]
-                f"Invalid VDOT: <code>{args[0]}</code>. Provide a number or omit to use your race results.",
+                f"Invalid VDOT: <code>{args[0]}</code>. "
+                "Provide a number or omit to use your race results.",
                 parse_mode="HTML",
             )
             return
@@ -1185,7 +1217,7 @@ async def cmd_message(update: object, context: object) -> None:
         ts_deque.popleft()
     if len(ts_deque) >= _RATE_LIMIT:
         await update.message.reply_text(  # type: ignore[union-attr]
-            "Steady on \u2014 I can only handle a few messages per minute. "
+            "Steady on — I can only handle a few messages per minute. "
             "Try again shortly."
         )
         return

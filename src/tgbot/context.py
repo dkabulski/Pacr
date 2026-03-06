@@ -78,7 +78,7 @@ def _predict_time(vdot: float, distance_km: float) -> float | None:
     """Binary-search for the race time (seconds) that yields a given VDOT.
 
     Higher VDOT = faster runner, so shorter time.  Returns None if no
-    reasonable solution is found within 60 s – 24 h.
+    reasonable solution is found within 60 s - 24 h.
     """
     lo, hi = 60.0, 86_400.0
     for _ in range(60):
@@ -583,7 +583,7 @@ def _generate_plan_with_claude(
 
     today_dt = datetime.now(tz=UTC).date()
     today = today_dt.isoformat()
-    # Snap plan start to Monday of the current ISO week so every week is Mon–Sun
+    # Snap plan start to Monday of the current ISO week so every week is Mon-Sun
     plan_start = (today_dt - timedelta(days=today_dt.weekday())).isoformat()
 
     # Pre-calculate target pace so the model never has to do the arithmetic
