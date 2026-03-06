@@ -440,6 +440,46 @@ async def morning_checkin(context: object) -> None:
     )
 
 
+async def weekly_debrief(context: object) -> None:
+    """Sunday evening check-in — reflect on the week and flag anything forward."""
+    # Only fire on Sundays (weekday 6)
+    if datetime.now(tz=UTC).weekday() != 6:
+        return
+
+    config = _cfg(context)
+
+    week_summary = _format_week_vs_plan()
+    text = (
+        f"<b>Weekly Check-in</b>\n\n"
+        f"{week_summary}\n\n"
+        "How did the week go? Anything worth flagging — sessions that felt "
+        "harder or easier than expected, any niggles, or anything life threw "
+        "at you? A quick note helps me keep next week honest."
+    )
+
+    # Append any active wellness issues as a reminder
+    try:
+        from coach_utils.wellness import get_active_issues
+
+        active_issues = get_active_issues()
+        if active_issues:
+            parts = [
+                f"{i['body_part']} ({i['severity']}/10)" for i in active_issues[:3]
+            ]
+            text += (
+                f"\n\n\u26a0 Active issues: {', '.join(parts)}. "
+                "How are these feeling after the week?"
+            )
+    except Exception:
+        pass
+
+    await context.bot.send_message(  # type: ignore[union-attr]
+        chat_id=config.chat_id,
+        text=text,
+        parse_mode="HTML",
+    )
+
+
 async def cmd_start(update: object, context: object) -> None:
     logger.info("/start")
     status = await asyncio.to_thread(_format_status)

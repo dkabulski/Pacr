@@ -37,6 +37,7 @@ logger = logging.getLogger("pacr")
 STRAVA_POLL_INTERVAL = int(os.environ.get("STRAVA_POLL_INTERVAL", "1800"))
 STRAVA_ANALYSIS_DELAY = int(os.environ.get("STRAVA_ANALYSIS_DELAY", "600"))  # 10 min
 MORNING_CHECKIN_HOUR = int(os.environ.get("MORNING_CHECKIN_HOUR", "8"))
+WEEKLY_DEBRIEF_HOUR = int(os.environ.get("WEEKLY_DEBRIEF_HOUR", "19"))
 STRAVA_WEBHOOK_PORT = int(os.environ.get("STRAVA_WEBHOOK_PORT", "0"))
 
 # Re-export from submodules so tests can import via `tgbot.bot.*`
@@ -115,6 +116,7 @@ from tgbot.handlers import (  # noqa: E402, F401
     cmd_wellness,
     cmd_zones,
     morning_checkin,
+    weekly_debrief,
 )
 from tgbot.km_query import (  # noqa: E402, F401
     SPORT_KEY_MAP,
@@ -274,6 +276,14 @@ def bot() -> None:
         name="morning_checkin",
     )
     logger.info("Morning check-in scheduled at %02d:00 UTC", MORNING_CHECKIN_HOUR)
+    app.job_queue.run_daily(
+        weekly_debrief,
+        time=dt_time(hour=WEEKLY_DEBRIEF_HOUR, minute=0, tzinfo=UTC),
+        name="weekly_debrief",
+    )
+    logger.info(
+        "Weekly debrief scheduled at %02d:00 UTC on Sundays", WEEKLY_DEBRIEF_HOUR
+    )
 
     if STRAVA_WEBHOOK_PORT:
         import threading
