@@ -718,14 +718,14 @@ _FALLBACK_QUOTES = [
     '"Sweat is just weakness evaporating and leaving a damp patch." — G. Mercer',
     (
         '"The finish line is just the start line of your excuses."'
-        ' — P. Dunne, Athletics Monthly'
+        " — P. Dunne, Athletics Monthly"
     ),
     '"You can rest when you\'re DNS." — M. Wills, Track & Field Quarterly',
     '"A 10k does not care how busy you were last week." — Coach B. Stanton',
     '"The treadmill is not running. You are just failing to escape." — J. Carmichael',
     (
         '"Champions are made in the moments when they want to stop'
-        ' but don\'t have a good enough excuse." — F. Kimura'
+        " but don't have a good enough excuse.\" — F. Kimura"
     ),
     '"Pain is temporary. Your Strava is forever." — Dr. A. Hollis',
     (
@@ -743,12 +743,12 @@ _FALLBACK_QUOTES = [
     ),
     (
         '"The marathon doesn\'t care about your personality."'
-        ' — R. Abara, Dublin Track Club'
+        " — R. Abara, Dublin Track Club"
     ),
     '"Consistency is the enemy of excuses." — Coach H. Bergström',
     (
         '"Run easy until it feels easy, then run slightly less easy."'
-        ' — J. Osei, VDOT Research Unit'
+        " — J. Osei, VDOT Research Unit"
     ),
     '"The plan is not optional. The suffering is." — M. Farrant',
 ]

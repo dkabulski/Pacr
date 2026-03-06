@@ -629,9 +629,7 @@ def _format_wellness(issues: list[dict], patterns: list[dict]) -> str:
             lines.append(
                 f"  <code>{eid}</code> {date} · {part}: {itype} {sev}/10{note_str}"
             )
-        lines.append(
-            "\nResolve with: <code>/wellness resolve &lt;id&gt;</code>"
-        )
+        lines.append("\nResolve with: <code>/wellness resolve &lt;id&gt;</code>")
 
     if patterns:
         lines.append("\n<b>Patterns</b>")
@@ -704,10 +702,7 @@ def _format_countdown() -> str:
     today_str = today.isoformat()
 
     all_dates = [
-        s.get("date", "")
-        for w in weeks
-        for s in w.get("sessions", [])
-        if s.get("date")
+        s.get("date", "") for w in weeks for s in w.get("sessions", []) if s.get("date")
     ]
     if not all_dates:
         return "No dated sessions in the plan."
