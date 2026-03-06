@@ -21,10 +21,14 @@ from tgbot.context import (
 )
 from tgbot.debrief import parse_rpe, save_debrief
 from tgbot.formatters import (
+    _format_countdown,
     _format_last_activity,
     _format_next_sessions,
+    _format_pace_calc,
     _format_plan_overview,
     _format_plan_summary,
+    _format_predict,
+    _format_readiness,
     _format_results,
     _format_status,
     _format_today_session,
@@ -32,6 +36,7 @@ from tgbot.formatters import (
     _format_week_by_number,
     _format_week_vs_plan,
     _format_weekly_summary,
+    _format_wellness,
     _format_zones,
     _today_session,
     _weekly_summary,
@@ -316,6 +321,16 @@ async def _run_analysis(new_act_ids: set[int], context: object, chat_id: str) ->
         text="How did that feel? Reply with RPE 1–10 … or <code>skip</code>.",
         parse_mode="HTML",
     )
+
+    # Motivational quote after every run
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    try:
+        quote = await asyncio.to_thread(_motivation_quote, api_key)
+        await context.bot.send_message(  # type: ignore[union-attr]
+            chat_id=chat_id, text=f"<i>{quote}</i>", parse_mode="HTML"
+        )
+    except Exception:
+        logger.debug("Post-run motivation quote failed — skipping", exc_info=True)
 
 
 async def _heartbeat(context: object) -> None:
@@ -685,6 +700,296 @@ async def cmd_clear(update: object, context: object) -> None:
     await update.message.reply_text("Conversation history cleared.")  # type: ignore[union-attr]
 
 
+_FALLBACK_QUOTES = [
+    '"Iron sharpens iron. Biscuits sharpen nothing." — Coach T. Rigby, 1994',
+    '"Somewhere a Kenyan is warming up. You are already behind." — Anonymous',
+    '"The only bad run is the one where you checked your watch and then sat down." — D. Hutchins',
+    '"Two types of pain: the pain of discipline, and the pain of explaining your DNF." — R. Oswald',
+    '"Your legs are not giving out. Your brain is giving up. Evict it." — Coach O. Leary',
+    '"Sweat is just weakness evaporating and leaving a damp patch." — G. Mercer',
+    '"The finish line is just the start line of your excuses." — P. Dunne, Athletics Monthly',
+    '"You can rest when you\'re DNS." — M. Wills, Track & Field Quarterly',
+    '"A 10k does not care how busy you were last week." — Coach B. Stanton',
+    '"The treadmill is not running. You are just failing to escape." — J. Carmichael',
+    '"Champions are made in the moments when they want to stop but don\'t have a good enough excuse." — F. Kimura',
+    '"Pain is temporary. Your Strava is forever." — Dr. A. Hollis',
+    '"The body achieves what the mind believes, unless the mind has been watching too much television." — Coach S. Nkosi',
+    '"No one ever looked back on a race and wished they had started slower." — E. Okafor, 2003 (disputed)',
+    '"Fatigue is just fitness knocking loudly." — T. Lindqvist',
+    '"Easy days are the hardest days because they require humility, and you have very little." — Coach P. Reyes',
+    '"The marathon doesn\'t care about your personality." — R. Abara, Dublin Track Club',
+    '"Consistency is the enemy of excuses." — Coach H. Bergström',
+    '"Run easy until it feels easy, then run slightly less easy." — J. Osei, VDOT Research Unit',
+    '"The plan is not optional. The suffering is." — M. Farrant',
+]
+
+
+def _motivation_quote(api_key: str) -> str:
+    """Return a funny made-up motivational running quote.
+
+    Uses Claude Haiku if an API key is available; falls back to the hardcoded
+    list otherwise.
+    """
+    import random
+
+    if not api_key:
+        return random.choice(_FALLBACK_QUOTES)
+
+    try:
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model=HAIKU_MODEL,
+            max_tokens=80,
+            system=(
+                "You produce one short, made-up motivational running quote. "
+                "Style: dry, faintly absurd, like 'iron sharpens iron' but original. "
+                "British English. One sentence, then a short attribution to a "
+                "plausible-sounding fake person or publication. "
+                "No exclamation marks. No emojis. Output only the quote."
+            ),
+            messages=[{"role": "user", "content": "Give me a motivational quote."}],
+        )
+        text = next((b.text for b in msg.content if hasattr(b, "text")), "").strip()
+        return text if text else random.choice(_FALLBACK_QUOTES)
+    except Exception:
+        logger.debug("Motivation quote API call failed — using fallback", exc_info=True)
+        return random.choice(_FALLBACK_QUOTES)
+
+
+async def cmd_motivation(update: object, context: object) -> None:
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    quote = await asyncio.to_thread(_motivation_quote, api_key)
+    await update.message.reply_text(f"<i>{quote}</i>", parse_mode="HTML")  # type: ignore[union-attr]
+
+
+async def cmd_readiness(update: object, context: object) -> None:
+    from coach_utils.readiness import assess_readiness
+
+    data = await asyncio.to_thread(assess_readiness)
+    text = _format_readiness(data)
+    await update.message.reply_text(text, parse_mode="HTML")  # type: ignore[union-attr]
+
+
+async def cmd_wellness(update: object, context: object) -> None:
+    from coach_utils.wellness import (
+        detect_patterns,
+        get_active_issues,
+        log_entry,
+        resolve_entry,
+    )
+
+    args = context.args or []  # type: ignore[union-attr]
+
+    # /wellness resolve <id>
+    if args and args[0].lower() == "resolve":
+        if len(args) < 2:
+            await update.message.reply_text(  # type: ignore[union-attr]
+                "Usage: <code>/wellness resolve &lt;id&gt;</code>",
+                parse_mode="HTML",
+            )
+            return
+        entry_id = args[1]
+        ok = await asyncio.to_thread(resolve_entry, entry_id)
+        if ok:
+            await update.message.reply_text(  # type: ignore[union-attr]
+                f"Issue <code>{entry_id}</code> resolved.", parse_mode="HTML"
+            )
+        else:
+            await update.message.reply_text(  # type: ignore[union-attr]
+                f"No active issue found with id <code>{entry_id}</code>.",
+                parse_mode="HTML",
+            )
+        return
+
+    # /wellness <body_part...> <severity> [notes...]
+    # Find first integer arg — it becomes severity; everything before = body_part,
+    # everything after = notes.
+    if args:
+        sev_idx: int | None = None
+        for i, a in enumerate(args):
+            if a.isdigit():
+                sev_idx = i
+                break
+
+        if sev_idx is not None:
+            body_part = " ".join(args[:sev_idx])
+            severity = int(args[sev_idx])
+            notes = " ".join(args[sev_idx + 1 :])
+            if not body_part:
+                await update.message.reply_text(  # type: ignore[union-attr]
+                    "Please specify a body part, e.g. <code>/wellness left knee 6</code>",
+                    parse_mode="HTML",
+                )
+                return
+            entry = await asyncio.to_thread(
+                log_entry, "soreness", body_part, severity, notes
+            )
+            eid = entry.get("id", "?")
+            await update.message.reply_text(  # type: ignore[union-attr]
+                f"Logged: {body_part} soreness {severity}/10"
+                + (f" — {notes}" if notes else "")
+                + f"\nID: <code>{eid}</code>",
+                parse_mode="HTML",
+            )
+            return
+
+        # No digit found — fall through to show
+        await update.message.reply_text(  # type: ignore[union-attr]
+            "Usage:\n"
+            "  /wellness — show active issues\n"
+            "  /wellness &lt;body_part&gt; &lt;severity&gt; [notes] — log issue\n"
+            "  /wellness resolve &lt;id&gt; — resolve issue",
+            parse_mode="HTML",
+        )
+        return
+
+    # No args — show current issues
+    issues = await asyncio.to_thread(get_active_issues)
+    patterns = await asyncio.to_thread(detect_patterns)
+    text = _format_wellness(issues, patterns)
+    await update.message.reply_text(text, parse_mode="HTML")  # type: ignore[union-attr]
+
+
+def _parse_time_str(s: str) -> float | None:
+    """Parse a time string to total seconds.
+
+    Accepts: H:MM:SS, H:MMh, MM:SS, or plain minutes (e.g. 81).
+    """
+    import re
+
+    s = s.strip()
+    # H:MM:SS
+    m = re.match(r"^(\d+):(\d+):(\d+)$", s)
+    if m:
+        return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3))
+    # H:MMh
+    m = re.match(r"^(\d+):(\d+)h$", s)
+    if m:
+        return int(m.group(1)) * 3600 + int(m.group(2)) * 60
+    # MM:SS
+    m = re.match(r"^(\d+):(\d+)$", s)
+    if m:
+        return int(m.group(1)) * 60 + int(m.group(2))
+    return None
+
+
+async def cmd_pace(update: object, context: object) -> None:
+    """Calculate pace, VDOT and training zones from distance + finish time."""
+    from tgbot.context import _calculate_vdot, _vdot_paces
+
+    args = context.args or []  # type: ignore[union-attr]
+    if len(args) < 2:
+        await update.message.reply_text(  # type: ignore[union-attr]
+            "Usage: /pace &lt;distance&gt; &lt;time&gt;\n"
+            "Examples:\n"
+            "  <code>/pace 5k 21:30</code>\n"
+            "  <code>/pace half 1:21:00</code>\n"
+            "  <code>/pace marathon 3:30:00</code>\n"
+            "  <code>/pace 10 45:00</code>",
+            parse_mode="HTML",
+        )
+        return
+
+    time_str = args[-1]
+    dist_raw = " ".join(args[:-1]).lower().strip()
+
+    _DIST_MAP: dict[str, float] = {
+        "marathon": 42.195,
+        "half marathon": 21.0975,
+        "half": 21.0975,
+        "hm": 21.0975,
+        "10k": 10.0,
+        "10km": 10.0,
+        "5k": 5.0,
+        "5km": 5.0,
+        "mile": 1.60934,
+        "1 mile": 1.60934,
+    }
+    distance_km = _DIST_MAP.get(dist_raw)
+    if distance_km is None:
+        import re as _re
+
+        m = _re.match(r"(\d+(?:\.\d+)?)", dist_raw)
+        if m:
+            distance_km = float(m.group(1))
+    if distance_km is None:
+        await update.message.reply_text(  # type: ignore[union-attr]
+            f"Unknown distance: <code>{dist_raw}</code>. "
+            "Use 5k, 10k, half, marathon, or a number in km.",
+            parse_mode="HTML",
+        )
+        return
+
+    time_s = _parse_time_str(time_str)
+    if time_s is None:
+        await update.message.reply_text(  # type: ignore[union-attr]
+            f"Could not parse time: <code>{time_str}</code>. "
+            "Use MM:SS, H:MM:SS, or H:MMh.",
+            parse_mode="HTML",
+        )
+        return
+
+    # Sanity-check: if pace would be faster than 2:00/km treat MM:SS as H:MMm
+    if time_s / distance_km < 120 and ":" in time_str and time_str.count(":") == 1:
+        parts = time_str.split(":")
+        time_s = int(parts[0]) * 3600 + int(parts[1]) * 60
+
+    vdot = await asyncio.to_thread(_calculate_vdot, distance_km, time_s)
+    paces = await asyncio.to_thread(_vdot_paces, vdot) if vdot else {}
+    text = _format_pace_calc(distance_km, time_s, vdot, paces)
+    await update.message.reply_text(text, parse_mode="HTML")  # type: ignore[union-attr]
+
+
+async def cmd_countdown(update: object, context: object) -> None:
+    text = await asyncio.to_thread(_format_countdown)
+    await update.message.reply_text(text, parse_mode="HTML")  # type: ignore[union-attr]
+
+
+async def cmd_predict(update: object, context: object) -> None:
+    """Predict race times at standard distances from VDOT."""
+    from tgbot.context import _best_vdot_from_results, _predict_time, _vdot_paces
+
+    args = context.args or []  # type: ignore[union-attr]
+
+    vdot: float | None = None
+    if args:
+        try:
+            vdot = float(args[0])
+        except ValueError:
+            await update.message.reply_text(  # type: ignore[union-attr]
+                f"Invalid VDOT: <code>{args[0]}</code>. Provide a number or omit to use your race results.",
+                parse_mode="HTML",
+            )
+            return
+    else:
+        vdot = await asyncio.to_thread(_best_vdot_from_results)
+
+    if vdot is None:
+        await update.message.reply_text(  # type: ignore[union-attr]
+            "No VDOT available — add race results first with /results, "
+            "or pass a VDOT directly: <code>/predict 52.5</code>",
+            parse_mode="HTML",
+        )
+        return
+
+    _PRED_DISTANCES: dict[str, float] = {
+        "1 mile": 1.60934,
+        "5k": 5.0,
+        "10k": 10.0,
+        "Half Marathon": 21.0975,
+        "Marathon": 42.195,
+    }
+    predictions: dict[str, float | None] = {}
+    for label, km in _PRED_DISTANCES.items():
+        predictions[label] = await asyncio.to_thread(_predict_time, vdot, km)
+
+    paces = await asyncio.to_thread(_vdot_paces, vdot)
+    text = _format_predict(vdot, predictions, paces)
+    await update.message.reply_text(text, parse_mode="HTML")  # type: ignore[union-attr]
+
+
 async def cmd_help(update: object, context: object) -> None:
     text = (
         "<b>Available Commands</b>\n\n"
@@ -693,6 +998,7 @@ async def cmd_help(update: object, context: object) -> None:
         "/week [N] — This week vs plan, or a specific week: /week 3\n"
         "/next — Next 5 upcoming sessions\n"
         "/today — Today's prescribed session\n"
+        "/countdown — Days to race day + current training phase\n"
         "/last — Full detail on the last activity\n"
         "/summary — Last 7 days: distance, time, pace\n"
         "/plan — Current week of training plan\n"
@@ -703,10 +1009,17 @@ async def cmd_help(update: object, context: object) -> None:
         " --days=5 --max-km=70</code>\n"
         "/analyse — Analyse last activity: flags, coaching opinion &amp; debrief\n"
         "/reanalyse — Re-analyse last activity on demand\n"
-        "/load — Training load: CTL/ATL/TSB + weekly km\n"
+        "/load — Training load: CTL/ATL/TSB + weekly km sparkline\n"
+        "/readiness — Race readiness assessment\n"
         "/results — Race results\n"
+        "/predict [vdot] — Predict race times from VDOT\n"
+        "/pace &lt;distance&gt; &lt;time&gt; — Pace calculator + VDOT training paces\n"
         "/zones — HR and pace training zones\n"
         "/adherence [weeks] — Plan adherence score (default 4 weeks)\n"
+        "/motivation — Get a motivational quote\n"
+        "/wellness — Show injury/wellness log\n"
+        "/wellness &lt;body_part&gt; &lt;1-10&gt; [notes] — Log an issue\n"
+        "/wellness resolve &lt;id&gt; — Mark an issue resolved\n"
         "/sport [type] — Set activity type filter (run/ride/hike/swim/walk/all)\n"
         "/model [haiku|sonnet|opus] — Switch AI model for chat\n"
         "/clear — Clear conversation history\n"

@@ -103,16 +103,27 @@ def assess_readiness(goal: str | None = None) -> dict:
             "half marathon": 21.0975,
             "marathon": 42.195,
         }
+        import re as _re
+
         best_vdot: float | None = None
         for r in race_results or []:
-            event = r.get("event", "").lower()
             time_str = r.get("time", "")
-            dist_km = next((v for k, v in dist_map.items() if k in event), None)
+            # Prefer the explicit distance field; fall back to event-name matching.
+            _dm = _re.match(r"(\d+(?:\.\d+)?)\s*km", r.get("distance", "").lower())
+            if _dm:
+                dist_km = float(_dm.group(1))
+            else:
+                event = r.get("event", "").lower()
+                dist_km = next((v for k, v in dist_map.items() if k in event), None)
             if dist_km and time_str:
                 parts = time_str.split(":")
                 try:
                     if len(parts) == 2:
                         time_s = int(parts[0]) * 60 + float(parts[1])
+                        # If the resulting pace is < 90 s/km (impossible for any
+                        # human race), reinterpret as H:MM rather than MM:SS.
+                        if time_s / dist_km < 90:
+                            time_s = int(parts[0]) * 3600 + int(parts[1]) * 60
                     elif len(parts) == 3:
                         time_s = (
                             int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])

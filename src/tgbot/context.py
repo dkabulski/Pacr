@@ -74,6 +74,70 @@ def _vdot_paces(vdot: float) -> dict[str, str]:
     }
 
 
+def _predict_time(vdot: float, distance_km: float) -> float | None:
+    """Binary-search for the race time (seconds) that yields a given VDOT.
+
+    Higher VDOT = faster runner, so shorter time.  Returns None if no
+    reasonable solution is found within 60 s – 24 h.
+    """
+    lo, hi = 60.0, 86_400.0
+    for _ in range(60):
+        mid = (lo + hi) / 2
+        v = _calculate_vdot(distance_km, mid)
+        if v is None:
+            return None
+        if v > vdot:
+            lo = mid  # too fast (VDOT too high) → need more time
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
+def _best_vdot_from_results() -> float | None:
+    """Return the best VDOT calculated from cached race results, or None."""
+    from strava_utils import pot10
+
+    dist_map = {
+        "5k": 5.0,
+        "5km": 5.0,
+        "10k": 10.0,
+        "10km": 10.0,
+        "hm": 21.0975,
+        "half marathon": 21.0975,
+        "marathon": 42.195,
+    }
+    best: float | None = None
+    for r in pot10._load_results() or []:
+        time_str = r.get("time", "")
+        _dm = re.match(r"(\d+(?:\.\d+)?)\s*km", r.get("distance", "").lower())
+        if _dm:
+            dist_km: float | None = float(_dm.group(1))
+        else:
+            dist_km = next(
+                (v for k, v in dist_map.items() if k in r.get("event", "").lower()),
+                None,
+            )
+        if not dist_km or not time_str:
+            continue
+        parts = time_str.split(":")
+        try:
+            if len(parts) == 2:
+                time_s = int(parts[0]) * 60 + float(parts[1])
+                # Reinterpret as H:MM if pace is impossibly fast (< 90 s/km)
+                if time_s / dist_km < 90:
+                    time_s = int(parts[0]) * 3600 + int(parts[1]) * 60
+            elif len(parts) == 3:
+                time_s = int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
+            else:
+                continue
+            v = _calculate_vdot(dist_km, time_s)
+            if v and (best is None or v > best):
+                best = v
+        except (ValueError, IndexError):
+            pass
+    return best
+
+
 def _compute_goal_pace(goal: str) -> str | None:
     """Parse a natural-language goal and return target pace as mm:ss/km.
 
@@ -408,15 +472,23 @@ def _build_static_context(sport_key: str = "run") -> str:
             "marathon": 42.195,
         }
         for r in results[:5]:
-            event = r.get("event", "").lower()
             time_str = r.get("time", "")
             lines.append(f"  {r.get('date', '?')} {r.get('event', '?')} — {time_str}.")
-            dist_km = next((v for k, v in dist_map.items() if k in event), None)
+            _dm = re.match(r"(\d+(?:\.\d+)?)\s*km", r.get("distance", "").lower())
+            if _dm:
+                dist_km = float(_dm.group(1))
+            else:
+                dist_km = next(
+                    (v for k, v in dist_map.items() if k in r.get("event", "").lower()),
+                    None,
+                )
             if dist_km and time_str:
                 parts = time_str.split(":")
                 try:
                     if len(parts) == 2:
                         time_s = int(parts[0]) * 60 + float(parts[1])
+                        if time_s / dist_km < 90:
+                            time_s = int(parts[0]) * 3600 + int(parts[1]) * 60
                     elif len(parts) == 3:
                         time_s = (
                             int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])

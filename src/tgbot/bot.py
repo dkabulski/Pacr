@@ -37,6 +37,7 @@ logger = logging.getLogger("pacr")
 STRAVA_POLL_INTERVAL = int(os.environ.get("STRAVA_POLL_INTERVAL", "1800"))
 STRAVA_ANALYSIS_DELAY = int(os.environ.get("STRAVA_ANALYSIS_DELAY", "600"))  # 10 min
 MORNING_CHECKIN_HOUR = int(os.environ.get("MORNING_CHECKIN_HOUR", "8"))
+STRAVA_WEBHOOK_PORT = int(os.environ.get("STRAVA_WEBHOOK_PORT", "0"))
 
 # Re-export from submodules so tests can import via `tgbot.bot.*`
 from tgbot.claude_chat import (  # noqa: E402, F401
@@ -88,15 +89,20 @@ from tgbot.handlers import (  # noqa: E402, F401
     cmd_adherence,
     cmd_analyse,
     cmd_clear,
+    cmd_countdown,
     cmd_edit_week,
+    cmd_motivation,
     cmd_help,
     cmd_last,
     cmd_load,
     cmd_message,
     cmd_model,
     cmd_next,
+    cmd_pace,
     cmd_plan,
     cmd_plan_overview,
+    cmd_predict,
+    cmd_readiness,
     cmd_results,
     cmd_setplan,
     cmd_sport,
@@ -105,6 +111,7 @@ from tgbot.handlers import (  # noqa: E402, F401
     cmd_sync,
     cmd_today,
     cmd_week,
+    cmd_wellness,
     cmd_zones,
     morning_checkin,
 )
@@ -191,6 +198,7 @@ def bot() -> None:
                 BotCommand("start", "Show status overview"),
                 BotCommand("sync", "Sync Strava activities"),
                 BotCommand("today", "Today's planned session"),
+                BotCommand("countdown", "Days to race day"),
                 BotCommand("week", "This week vs plan"),
                 BotCommand("next", "Next 5 planned sessions"),
                 BotCommand("last", "Last activity detail"),
@@ -202,9 +210,14 @@ def bot() -> None:
                 BotCommand("analyse", "Analyse last activity"),
                 BotCommand("reanalyse", "Re-analyse last activity on demand"),
                 BotCommand("load", "Training load: CTL/ATL/TSB + weekly km"),
+                BotCommand("readiness", "Race readiness assessment"),
                 BotCommand("results", "Race results"),
+                BotCommand("predict", "Predict race times from VDOT"),
+                BotCommand("pace", "Pace calculator + training zones"),
                 BotCommand("zones", "HR and pace zones"),
                 BotCommand("adherence", "Plan adherence score"),
+                BotCommand("motivation", "Get a motivational quote"),
+                BotCommand("wellness", "Injury and wellness log"),
                 BotCommand("sport", "Set activity type filter"),
                 BotCommand("model", "Switch AI model (haiku/sonnet/opus)"),
                 BotCommand("clear", "Clear conversation history"),
@@ -226,6 +239,7 @@ def bot() -> None:
     app.add_handler(CommandHandler("week", cmd_week, filters=chat_filter))
     app.add_handler(CommandHandler("next", cmd_next, filters=chat_filter))
     app.add_handler(CommandHandler("today", cmd_today, filters=chat_filter))
+    app.add_handler(CommandHandler("countdown", cmd_countdown, filters=chat_filter))
     app.add_handler(CommandHandler("last", cmd_last, filters=chat_filter))
     app.add_handler(CommandHandler("summary", cmd_summary, filters=chat_filter))
     app.add_handler(CommandHandler("plan", cmd_plan, filters=chat_filter))
@@ -235,11 +249,16 @@ def bot() -> None:
     app.add_handler(CommandHandler("analyse", cmd_analyse, filters=chat_filter))
     app.add_handler(CommandHandler("reanalyse", cmd_analyse, filters=chat_filter))
     app.add_handler(CommandHandler("load", cmd_load, filters=chat_filter))
+    app.add_handler(CommandHandler("readiness", cmd_readiness, filters=chat_filter))
     app.add_handler(CommandHandler("results", cmd_results, filters=chat_filter))
+    app.add_handler(CommandHandler("predict", cmd_predict, filters=chat_filter))
+    app.add_handler(CommandHandler("pace", cmd_pace, filters=chat_filter))
     app.add_handler(CommandHandler("zones", cmd_zones, filters=chat_filter))
     app.add_handler(CommandHandler("sport", cmd_sport, filters=chat_filter))
     app.add_handler(CommandHandler("model", cmd_model, filters=chat_filter))
     app.add_handler(CommandHandler("adherence", cmd_adherence, filters=chat_filter))
+    app.add_handler(CommandHandler("motivation", cmd_motivation, filters=chat_filter))
+    app.add_handler(CommandHandler("wellness", cmd_wellness, filters=chat_filter))
     app.add_handler(CommandHandler("clear", cmd_clear, filters=chat_filter))
     app.add_handler(CommandHandler("help", cmd_help, filters=chat_filter))
     app.add_handler(
@@ -252,6 +271,62 @@ def bot() -> None:
         name="morning_checkin",
     )
     logger.info("Morning check-in scheduled at %02d:00 UTC", MORNING_CHECKIN_HOUR)
+
+    if STRAVA_WEBHOOK_PORT:
+        import threading
+
+        from strava_utils.strava_webhook import serve as _webhook_serve
+
+        wh_thread = threading.Thread(
+            target=_webhook_serve,
+            kwargs={"port": STRAVA_WEBHOOK_PORT},
+            daemon=True,
+        )
+        wh_thread.start()
+        logger.info("Webhook server started on port %d", STRAVA_WEBHOOK_PORT)
+
+        async def _webhook_event_checker(context: object) -> None:
+            """Process any Strava push events written by the webhook server."""
+            from strava_utils.strava_webhook import _pop_events
+
+            events = _pop_events()
+            new_act_ids = {
+                e["object_id"]
+                for e in events
+                if e.get("object_type") == "activity"
+                and e.get("aspect_type") == "create"
+            }
+            if not new_act_ids:
+                return
+            cfg = app.bot_data["config"]
+            cid = int(cfg.chat_id)
+            logger.info(
+                "Webhook: %d new activity event(s) — scheduling analysis",
+                len(new_act_ids),
+            )
+            existing = cfg.pending_analysis.get(cid)
+            merged = list(set(list(new_act_ids) + (existing or {}).get("new_act_ids", [])))
+            if existing:
+                for job in context.job_queue.get_jobs_by_name(existing["job_name"]):  # type: ignore[union-attr]
+                    job.schedule_removal()
+            job_name = f"webhook_{list(new_act_ids)[0]}"
+            cfg.pending_analysis[cid] = {"job_name": job_name, "new_act_ids": merged}
+            await context.bot.send_message(  # type: ignore[union-attr]
+                chat_id=cfg.chat_id,
+                text=f"<b>Strava webhook:</b> {len(new_act_ids)} new activity event(s). "
+                f"Analysing in {STRAVA_ANALYSIS_DELAY // 60} min…",
+                parse_mode="HTML",
+            )
+            context.job_queue.run_once(  # type: ignore[union-attr]
+                _deferred_analysis,
+                when=STRAVA_ANALYSIS_DELAY,
+                data={"new_act_ids": merged},
+                name=job_name,
+            )
+
+        app.job_queue.run_repeating(_webhook_event_checker, interval=60, first=30)
+        logger.info("Webhook event checker scheduled (every 60 s)")
+
     app.run_polling()
 
 

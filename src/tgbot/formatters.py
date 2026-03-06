@@ -491,6 +491,43 @@ def _format_zones() -> str:
     return "\n".join(lines)
 
 
+_SPARK_CHARS = " ▁▂▃▄▅▆▇█"  # index 0 = space (empty column)
+
+
+def _sparkline(values: list[float]) -> str:
+    """Return a single-line sparkline string from a list of float values."""
+    if not values:
+        return ""
+    max_v = max(values) or 1.0
+    n = len(_SPARK_CHARS) - 1
+    return "".join(_SPARK_CHARS[min(round(v / max_v * n), n)] for v in values)
+
+
+def _sparkline2(values: list[float]) -> tuple[str, str]:
+    """Return a 2-row tall sparkline as (top_row, bottom_row), bottom-anchored.
+
+    Each column is split at 50% of max: the bottom row covers 0–50% and the
+    top row covers 50–100%, so every bar grows upward from the baseline.
+    """
+    if not values:
+        return "", ""
+    max_v = max(values) or 1.0
+    chars = _SPARK_CHARS  # ' ▁▂▃▄▅▆▇█'
+    n = 8
+    top: list[str] = []
+    bot: list[str] = []
+    for v in values:
+        f = v / max_v  # 0.0–1.0
+        if f < 0.5:
+            bot.append(chars[round(f / 0.5 * n)])
+            top.append(" ")
+        else:
+            bot.append("█")
+            top_level = max(1, round((f - 0.5) / 0.5 * n))
+            top.append(chars[top_level])
+    return "".join(top), "".join(bot)
+
+
 def _format_training_load(metrics: dict, trend: list[dict]) -> str:
     """Format CTL/ATL/TSB and weekly km bar chart as HTML."""
     ctl = metrics.get("ctl", 0.0)
@@ -506,6 +543,9 @@ def _format_training_load(metrics: dict, trend: list[dict]) -> str:
     else:
         label = "high fatigue"
 
+    km_values = [w["km"] for w in trend]
+    spark_top, spark_bot = _sparkline2(km_values)
+
     lines = [
         "<b>Training Load (PMC)</b>",
         f"CTL (fitness): {ctl:.1f}",
@@ -513,12 +553,226 @@ def _format_training_load(metrics: dict, trend: list[dict]) -> str:
         f"TSB (form): {tsb:+.1f} — {label}",
         "",
         "<b>Weekly km (last 12 weeks)</b>",
+        f"<code>{spark_top}</code>",
+        f"<code>{spark_bot}</code>",
     ]
     for w in trend:
         week = w["week"]
         km = w["km"]
         bar = "█" * min(int(km / 5), 20)
         lines.append(f"<code>{week}  {km:5.1f} km  {bar}</code>")
+
+    return "\n".join(lines)
+
+
+def _format_readiness(data: dict) -> str:
+    """Format race readiness assessment as HTML."""
+    overall = data.get("overall", "insufficient_data")
+    goal = data.get("goal", "No goal set")
+
+    overall_labels = {
+        "race_ready": "Race ready ✓",
+        "on_track": "On track",
+        "building": "Building",
+        "needs_work": "Needs work",
+        "insufficient_data": "Insufficient data",
+    }
+    label = overall_labels.get(overall, overall.replace("_", " ").title())
+
+    lines = [
+        "<b>Race Readiness</b>",
+        f"Goal: {goal}",
+        f"Status: <b>{label}</b>",
+        "",
+        f"Weekly avg: {data.get('weekly_avg_km', 0):.1f} km"
+        f" ({data.get('volume_status', '?')})",
+        f"Longest run: {data.get('longest_recent_run_km', 0):.1f} km"
+        f" ({data.get('long_run_status', '?')})",
+        f"CTL: {data.get('ctl', 0):.1f} ({data.get('ctl_trend', '?')})",
+    ]
+    if data.get("vdot"):
+        lines.append(f"VDOT: {data['vdot']}")
+
+    signals = data.get("signals", {})
+    pos = signals.get("positive", [])
+    neg = signals.get("negative", [])
+    neutral = signals.get("neutral", [])
+
+    if pos or neg or neutral:
+        lines.append("")
+    for s in pos:
+        lines.append(f"✓ {s}")
+    for s in neg:
+        lines.append(f"✗ {s}")
+    for s in neutral:
+        lines.append(f"· {s}")
+
+    return "\n".join(lines)
+
+
+def _format_wellness(issues: list[dict], patterns: list[dict]) -> str:
+    """Format wellness issues and detected patterns as HTML."""
+    lines = ["<b>Wellness</b>"]
+
+    if not issues:
+        lines.append("No active issues — all clear.")
+    else:
+        lines.append(f"\n<b>Active issues ({len(issues)})</b>")
+        for issue in issues:
+            eid = issue.get("id", "?")
+            date = issue.get("date", "?")
+            itype = issue.get("type", "?")
+            part = issue.get("body_part", "?")
+            sev = issue.get("severity", "?")
+            notes = issue.get("notes", "")
+            note_str = f" — {notes}" if notes else ""
+            lines.append(
+                f"  <code>{eid}</code> {date} · {part}: {itype} {sev}/10{note_str}"
+            )
+        lines.append(
+            "\nResolve with: <code>/wellness resolve &lt;id&gt;</code>"
+        )
+
+    if patterns:
+        lines.append("\n<b>Patterns</b>")
+        emoji_map = {"recurring": "🔄", "escalating": "⬆", "chronic": "⚠"}
+        for p in patterns:
+            ptype = p.get("type", "?")
+            part = p.get("body_part", "?")
+            detail = p.get("detail", "")
+            e = emoji_map.get(ptype, "·")
+            lines.append(f"  {e} {ptype.title()} — {part}: {detail}")
+
+    return "\n".join(lines)
+
+
+def _format_pace_calc(
+    distance_km: float,
+    time_s: float,
+    vdot: float | None,
+    training_paces: dict[str, str],
+) -> str:
+    """Format pace calculator result as HTML."""
+    pace_s = time_s / distance_km
+    pace_min = int(pace_s // 60)
+    pace_sec = int(pace_s % 60)
+
+    h = int(time_s // 3600)
+    m = int((time_s % 3600) // 60)
+    s = int(time_s % 60)
+    time_str = f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
+    lines = [
+        "<b>Pace Calculator</b>",
+        f"Distance: {distance_km:.3g} km",
+        f"Time: {time_str}",
+        f"Pace: <b>{pace_min}:{pace_sec:02d}/km</b>",
+    ]
+
+    # Per-km split interval: 5 km for long races, 1 km otherwise
+    split_km = 5.0 if distance_km >= 10 else 1.0
+    split_s = pace_s * split_km
+    sm, ss = int(split_s // 60), int(split_s % 60)
+    lines.append(f"{split_km:.0f} km split: {sm}:{ss:02d}")
+
+    if vdot:
+        lines.append(f"VDOT: {vdot:.1f}")
+        if training_paces:
+            lines.append("\n<b>Training paces (Jack Daniels)</b>")
+            for zone, pace in training_paces.items():
+                lines.append(f"  {zone}: {pace}")
+
+    return "\n".join(lines)
+
+
+def _format_countdown() -> str:
+    """Format race countdown from today to the last date in the training plan."""
+    from coach_utils import plan as plan_mod
+    from datetime import date as date_cls
+
+    p = plan_mod._load_plan()
+    if not p:
+        return "No training plan set."
+
+    weeks = p.get("weeks", [])
+    goal = p.get("goal", "No goal set")
+    if not weeks:
+        return "Training plan has no weeks."
+
+    today_str = datetime.now(tz=UTC).strftime("%Y-%m-%d")
+    today = date_cls.fromisoformat(today_str)
+
+    all_dates = [
+        s.get("date", "")
+        for w in weeks
+        for s in w.get("sessions", [])
+        if s.get("date")
+    ]
+    if not all_dates:
+        return "No dated sessions in the plan."
+
+    race_date_str = max(all_dates)
+    try:
+        race_date = date_cls.fromisoformat(race_date_str)
+    except ValueError:
+        return "Could not parse race date."
+
+    days_to_go = (race_date - today).days
+
+    # Current week number and phase
+    current_week_num: int | None = None
+    current_phase = ""
+    for i, week in enumerate(weeks, 1):
+        dates = [s.get("date", "") for s in week.get("sessions", []) if s.get("date")]
+        if dates and min(dates) <= today_str <= max(dates):
+            current_week_num = i
+            current_phase = week.get("phase", "")
+            break
+
+    lines = ["<b>Race Countdown</b>", f"Goal: {goal}", ""]
+
+    if days_to_go < 0:
+        lines.append(f"Race day was {abs(days_to_go)} days ago.")
+    elif days_to_go == 0:
+        lines.append(f"Race day is <b>today</b>! Good luck!")
+    else:
+        weeks_left = days_to_go // 7
+        days_rem = days_to_go % 7
+        if weeks_left:
+            countdown = f"{weeks_left}w {days_rem}d" if days_rem else f"{weeks_left}w"
+        else:
+            countdown = f"{days_rem}d"
+        lines.append(f"<b>{countdown}</b> to go ({race_date_str})")
+
+    if current_week_num:
+        phase_str = f" — {current_phase}" if current_phase else ""
+        lines.append(f"Week {current_week_num}/{len(weeks)}{phase_str}")
+
+    return "\n".join(lines)
+
+
+def _format_predict(
+    vdot: float,
+    predictions: dict[str, float | None],
+    training_paces: dict[str, str],
+) -> str:
+    """Format VDOT-based race time predictions as HTML."""
+    lines = [f"<b>Race Predictions (VDOT {vdot:.1f})</b>", ""]
+
+    for label, time_s in predictions.items():
+        if time_s is None:
+            lines.append(f"  {label}: —")
+            continue
+        h = int(time_s // 3600)
+        m = int((time_s % 3600) // 60)
+        s = int(time_s % 60)
+        time_str = f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+        lines.append(f"  {label}: {time_str}")
+
+    if training_paces:
+        lines += ["", "<b>Training paces</b>"]
+        for zone, pace in training_paces.items():
+            lines.append(f"  {zone}: {pace}")
 
     return "\n".join(lines)
 
