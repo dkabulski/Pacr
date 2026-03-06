@@ -55,17 +55,50 @@ RPE 7/10 logged.
 ```
 
 ### Training load & race readiness
-See your fitness, fatigue and form (CTL/ATL/TSB) at a glance, with a 12-week weekly km chart. Ask whether you're ready for a specific race and goal time — the bot cross-checks your current load, long run coverage and VDOT.
+See your fitness, fatigue and form (CTL/ATL/TSB) at a glance, with a 12-week weekly km chart. Ask whether you're ready for a specific race and goal time — the bot cross-checks your current load, long run coverage, CTL trend, and VDOT.
+
+### Zone breakdown
+See how your training volume is distributed across HR zones. Flags grey-zone (zone 3) overuse and checks you're keeping enough volume easy.
+
+```
+/breakdown 8
+→ Zone Breakdown — last 8 weeks (412 km, 38 activities)
+  Z1 Recovery   ░░░░░░░░░░░░░░   2%    8.2 km
+  Z2 Easy       ████████████░░░  72%  296.6 km
+  Z3 Tempo      ███░░░░░░░░░░░░  14%   57.7 km
+  Z4 Threshold  ██░░░░░░░░░░░░░   9%   37.1 km
+  Z5 VO2max     █░░░░░░░░░░░░░░   3%   12.4 km
+  ✅ 74% easy — good polarisation
+```
 
 ### Training plan
-Generate a structured training plan for any goal race and target time, following Jack Daniels' methodology (base → build → sharpen → taper). Optionally cap training days per week and maximum weekly km so the plan fits your life.
+Generate a structured training plan for any goal race and target time, following Jack Daniels' methodology (base → build → sharpen → taper). Weeks always run Monday–Sunday. Optionally cap training days per week and maximum weekly km so the plan fits your life.
 
 - `/planview` — compact week-by-week overview with phase, date range, and km totals
 - `/week` — this week's sessions vs what you've completed
 - `/week 5` — jump to any specific week in the plan
+- `/editweek 3 make it a recovery week` — modify a specific week with natural language
 - `/adherence` — percentage score across completed, partial, and missed sessions
 
 Sessions are formatted with emojis: 🔥 tempo/intervals, 🍃 easy, ⏳ long runs.
+
+### Race predictions & pacing
+Predict race times across standard distances using your current VDOT, or calculate training paces for any target time.
+
+```
+/predict
+→ Based on VDOT 53.2:
+  5K:     18:30    10K:    38:28
+  Half:   1:24:12  Marathon: 2:56:44
+
+/pace 1:25 half
+→ Goal pace: 4:01/km
+  Easy: 5:05–5:30    Tempo: 4:05–4:15
+  Interval: 3:42     Repetition: 3:28
+```
+
+### Weekly debrief
+Every Sunday evening the bot sends an automatic check-in with your week-vs-plan summary, asks how the week went, and carries your response into the coaching context.
 
 ### Injury & wellness tracking
 Log niggles in plain language. The bot tracks them over time, detects patterns (e.g. recurring knee soreness after long runs), and factors them into its coaching advice.
@@ -79,7 +112,10 @@ Any injury patterns I should know about?
 ```
 
 ### Automatic Strava sync
-Strava activities are synced automatically every 30 minutes. New activities are detected, analysed and sent to the chat without you doing anything.
+Strava activities are synced automatically every 30 minutes (polling) or instantly via Strava webhooks. New activities are detected, analysed against your plan and HR zones, and the coaching analysis is sent to the chat — no action needed.
+
+### Model switching
+Switch between Claude models on the fly with `/model haiku`, `/model sonnet`, or `/model opus`. Heavier tasks (plan generation, week editing) always use Sonnet regardless of the chat model.
 
 ---
 
@@ -154,20 +190,29 @@ All data (activities, plan, memory) is stored in `./data` on your host and persi
 | `/start` | Overview of your status and today's session |
 | `/sync [days]` | Sync Strava activities (default: last 365 days) |
 | `/today` | Today's prescribed training session |
+| `/countdown` | Days to race day |
 | `/week [N]` | This week vs plan, or a specific week — e.g. `/week 5` |
 | `/next` | Next 5 upcoming sessions |
 | `/last` | Full breakdown of your last activity |
 | `/summary` | Last 7 days: distance, time, pace |
 | `/plan` | Current week of training plan |
 | `/planview` | Week-by-week plan overview with phase and km totals |
+| `/editweek <N> <instruction>` | Edit a plan week with natural language — e.g. `/editweek 3 make it a recovery week` |
 | `/setplan <goal> [--days=N] [--max-km=N]` | Generate a new AI training plan — e.g. `/setplan half marathon on April 3 2026 in 1:21h --days=5 --max-km=70` |
 | `/analyse` | Analyse last activity: pacing flags, HR zones, coaching opinion |
 | `/reanalyse` | Re-run analysis on the last activity |
 | `/load` | Training load: CTL (fitness), ATL (fatigue), TSB (form) + weekly km chart |
+| `/readiness` | Race readiness assessment |
 | `/adherence [weeks]` | Plan adherence score — e.g. `/adherence 8` |
+| `/breakdown [weeks]` | Volume by HR zone — e.g. `/breakdown 8` |
 | `/results` | Cached race results |
+| `/predict` | Predict race times from VDOT |
+| `/pace` | Pace calculator + training zones |
 | `/zones` | Your HR and pace training zones |
+| `/motivation` | Get a motivational quote |
+| `/wellness` | Injury and wellness log |
 | `/sport [type]` | Filter by sport: `run` / `ride` / `hike` / `swim` / `walk` / `all` |
+| `/model [name]` | Switch AI model: `haiku` / `sonnet` / `opus` |
 | `/clear` | Clear conversation history |
 | `/help` | List all commands |
 
@@ -210,6 +255,8 @@ How many runs did I do over 30 km?
 How's my training load?
 Am I ready for a half marathon in 1:30?
 Is my CTL high enough for a marathon?
+/readiness
+/breakdown 8
 ```
 
 ### Plan & adherence
@@ -232,16 +279,20 @@ Is my CTL high enough for a marathon?
 /setplan half marathon on May 17 2026 in 1:21h --days=5 --max-km=70
 → Generating your plan...
 
+/editweek 3 make it a recovery week
+/countdown
 How well have I been sticking to my plan?
 Move Tuesday's tempo run to Thursday.
-Make next week a recovery week.
 ```
 
-### Splits & pacing
+### Predictions & pacing
 
 ```
+/predict
+/pace 1:25 half
 How were my splits on Thursday's run?
 Was my last race evenly paced?
+What pace should I run a 10k in 38 minutes?
 ```
 
 ### Wellness & injuries
@@ -250,13 +301,16 @@ Was my last race evenly paced?
 My left knee has been a bit sore, about a 3/10.
 Any injury patterns I should know about?
 My knee is fine now.
+/wellness
 ```
 
-### Switching sport
+### Switching sport & model
 
 ```
 /sport ride    → all commands now show only rides
 /sport all     → back to all sports
+/model haiku   → switch to fast model for quick queries
+/model sonnet  → switch back to default
 ```
 
 ---
@@ -273,21 +327,27 @@ Pacr/
 │   ├── strava_utils/
 │   │   ├── strava_auth.py       # OAuth setup
 │   │   ├── strava_sync.py       # Activity sync + cache (retry/backoff)
-│   │   └── pot10.py             # Power of 10 results [EXPERIMENTAL]
+│   │   ├── strava_webhook.py    # Strava webhook receiver (push events)
+│   │   └── pot10.py             # Power of 10 / manual race results
 │   ├── coach_utils/
-│   │   ├── analyze.py           # Session analysis
+│   │   ├── analyze.py           # Session analysis + HR zone classification
 │   │   ├── plan.py              # Training plan management
-│   │   └── training_load.py     # CTL/ATL/TSB metrics
+│   │   ├── training_load.py     # CTL/ATL/TSB metrics
+│   │   ├── readiness.py         # Race readiness assessment
+│   │   ├── adherence.py         # Plan adherence scoring
+│   │   ├── wellness.py          # Injury & wellness tracking
+│   │   └── records.py           # Personal records detection
 │   ├── memory/
 │   │   └── store.py             # ChromaDB vector memory
 │   └── tgbot/
-│       ├── bot.py               # Entry point
+│       ├── bot.py               # Entry point + scheduled jobs
 │       ├── handlers.py          # Command handlers
 │       ├── claude_chat.py       # Claude tool definitions + orchestration
 │       ├── context.py           # Athlete context + VDOT helpers
 │       ├── formatters.py        # Telegram HTML formatters
 │       ├── debrief.py           # RPE debrief storage
-│       └── km_query.py          # Local distance queries
+│       ├── km_query.py          # Local distance queries (no API calls)
+│       └── telegram_send.py     # Telegram message sending
 ├── config/
 │   ├── SOUL.md                  # Coaching personality
 │   ├── AGENTS.md                # Agent behaviour rules
@@ -308,11 +368,14 @@ Pacr/
 | `tokens.json` | Strava OAuth tokens |
 | `athlete.json` | Strava athlete profile |
 | `activities.json` | Cached Strava activities |
-| `race_results.json` | Race results |
+| `race_results.json` | Race results (Power of 10 + manual) |
+| `records.json` | Personal records (auto-detected PBs) |
 | `training_plan.json` | Current training plan |
 | `athlete_zones.json` | HR and pace zones |
 | `training_log.json` | Analysed session history |
 | `debriefs.json` | Post-run RPE debriefs |
+| `wellness_log.json` | Injury and wellness entries |
+| `settings.json` | Bot settings (model, sport filter) |
 | `conversation_history.json` | Telegram chat history |
 | `chroma/` | ChromaDB vector store (coaching memory) |
 
@@ -336,13 +399,19 @@ just auth-status # check token validity
 </details>
 
 <details>
-<summary>Race results — Power of 10</summary>
+<summary>Race results</summary>
 
-> ⚠ **Experimental**: The Power of 10 website is being rebuilt and web scraping is unreliable. Manual entry is the recommended workflow:
+Add race results manually or bulk-import from a script:
 
 ```bash
+# Single race
 uv run src/strava_utils/pot10.py add --date=2025-06-15 --event=parkrun --distance=5K --time=22:30
+
+# Bulk import (edit import_races.sh with your history)
+bash import_races.sh
 ```
+
+> Power of 10 web scraping (`pot10.py fetch`) is experimental — the site is being rebuilt. Manual entry via `add` is recommended.
 
 </details>
 
