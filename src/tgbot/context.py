@@ -581,7 +581,10 @@ def _generate_plan_with_claude(
             "ANTHROPIC_API_KEY not set. Add it to .env and restart the bot."
         )
 
-    today = datetime.now(tz=UTC).strftime("%Y-%m-%d")
+    today_dt = datetime.now(tz=UTC).date()
+    today = today_dt.isoformat()
+    # Snap plan start to Monday of the current ISO week so every week is Mon–Sun
+    plan_start = (today_dt - timedelta(days=today_dt.weekday())).isoformat()
 
     # Pre-calculate target pace so the model never has to do the arithmetic
     pace_hint = _compute_goal_pace(goal)
@@ -672,7 +675,9 @@ The JSON must follow this exact schema:
 
 Rules:
 - Use Jack Daniels mesocycle structure: base → build → sharpen → taper
-- Calculate all session dates from today ({today}) working backwards from the race date
+- Week 1 starts on {plan_start} (Monday). Every week runs Monday–Sunday.
+  Calculate all session dates forward from {plan_start} to the race date.
+  Today is {today} — sessions before today may already be in the past; keep them.
 - Include exactly 7 sessions per week (training days + rest days must sum to 7)
 - Use British English in descriptions
 - Set distance_km to the total session distance in km
