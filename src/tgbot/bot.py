@@ -88,6 +88,7 @@ from tgbot.handlers import (  # noqa: E402, F401
     _validate_data_path,
     cmd_adherence,
     cmd_analyse,
+    cmd_breakdown,
     cmd_clear,
     cmd_countdown,
     cmd_edit_week,
@@ -216,6 +217,7 @@ def bot() -> None:
                 BotCommand("pace", "Pace calculator + training zones"),
                 BotCommand("zones", "HR and pace zones"),
                 BotCommand("adherence", "Plan adherence score"),
+                BotCommand("breakdown", "Volume by HR zone (last N weeks)"),
                 BotCommand("motivation", "Get a motivational quote"),
                 BotCommand("wellness", "Injury and wellness log"),
                 BotCommand("sport", "Set activity type filter"),
@@ -257,6 +259,7 @@ def bot() -> None:
     app.add_handler(CommandHandler("sport", cmd_sport, filters=chat_filter))
     app.add_handler(CommandHandler("model", cmd_model, filters=chat_filter))
     app.add_handler(CommandHandler("adherence", cmd_adherence, filters=chat_filter))
+    app.add_handler(CommandHandler("breakdown", cmd_breakdown, filters=chat_filter))
     app.add_handler(CommandHandler("motivation", cmd_motivation, filters=chat_filter))
     app.add_handler(CommandHandler("wellness", cmd_wellness, filters=chat_filter))
     app.add_handler(CommandHandler("clear", cmd_clear, filters=chat_filter))

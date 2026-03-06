@@ -37,6 +37,7 @@ from tgbot.formatters import (
     _format_week_vs_plan,
     _format_weekly_summary,
     _format_wellness,
+    _format_zone_breakdown,
     _format_zones,
     _today_session,
     _weekly_summary,
@@ -1048,6 +1049,7 @@ async def cmd_help(update: object, context: object) -> None:
         "/pace &lt;distance&gt; &lt;time&gt; — Pace calculator + VDOT training paces\n"
         "/zones — HR and pace training zones\n"
         "/adherence [weeks] — Plan adherence score (default 4 weeks)\n"
+        "/breakdown [weeks] — Volume by HR zone (default 4 weeks)\n"
         "/motivation — Get a motivational quote\n"
         "/wellness — Show injury/wellness log\n"
         "/wellness &lt;body_part&gt; &lt;1-10&gt; [notes] — Log an issue\n"
@@ -1081,6 +1083,18 @@ async def cmd_adherence(update: object, context: object) -> None:
         f"\U0001f634 Rest days honoured: "
         f"{honoured}/{rest_total}"
     )
+    await update.message.reply_text(text, parse_mode="HTML")  # type: ignore[union-attr]
+
+
+async def cmd_breakdown(update: object, context: object) -> None:
+    """Show volume-by-HR-zone breakdown for the last N weeks (default 4)."""
+    args = context.args or []  # type: ignore[union-attr]
+    try:
+        weeks = max(1, min(int(args[0]), 52)) if args else 4
+    except (ValueError, IndexError):
+        weeks = 4
+    sport_types = types_for_key(_cfg(context).activity_type)
+    text = await asyncio.to_thread(_format_zone_breakdown, weeks, sport_types)
     await update.message.reply_text(text, parse_mode="HTML")  # type: ignore[union-attr]
 
 

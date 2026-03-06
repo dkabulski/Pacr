@@ -773,6 +773,115 @@ def _format_predict(
     return "\n".join(lines)
 
 
+def _format_zone_breakdown(weeks: int = 4, sport_types: set[str] | None = None) -> str:
+    """Format volume-by-zone breakdown for the last N weeks."""
+    import json as _json
+
+    import _token_utils
+    from coach_utils.analyze import classify_hr_zone
+    from strava_utils import strava_sync
+
+    zones_path = _token_utils.DATA_DIR / "athlete_zones.json"
+    if not zones_path.exists():
+        return "No zones configured. Run: <code>just zones &lt;maxhr&gt;</code>"
+
+    zones = _json.loads(zones_path.read_text())
+    hr_zones = zones.get("hr_zones", {})
+    if not hr_zones:
+        return "No HR zones configured in athlete_zones.json."
+
+    cutoff = datetime.now(tz=UTC) - timedelta(days=weeks * 7)
+
+    zone_km: dict[str, float] = {
+        "zone1": 0.0,
+        "zone2": 0.0,
+        "zone3": 0.0,
+        "zone4": 0.0,
+        "zone5": 0.0,
+        "unclassified": 0.0,
+    }
+    zone_labels = {
+        "zone1": "Z1 Recovery",
+        "zone2": "Z2 Easy",
+        "zone3": "Z3 Tempo",
+        "zone4": "Z4 Threshold",
+        "zone5": "Z5 VO2max",
+        "unclassified": "No HR data",
+    }
+
+    activity_count = 0
+    all_activities = strava_sync._load_cached()
+    if sport_types:
+        all_activities = [
+            a
+            for a in all_activities
+            if a.get("type") in sport_types or a.get("sport_type") in sport_types
+        ]
+    for act in all_activities:
+        date_str = act.get("date", "")
+        if not date_str:
+            continue
+        try:
+            dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if dt < cutoff:
+            continue
+        km = act.get("distance_km", 0) or 0
+        if km <= 0:
+            continue
+        activity_count += 1
+        avg_hr = act.get("avg_hr")
+        if avg_hr:
+            result = classify_hr_zone(avg_hr, hr_zones)
+            zone = result.get("zone", "unclassified")
+            zone_km[zone if zone in zone_km else "unclassified"] += km
+        else:
+            zone_km["unclassified"] += km
+
+    total_km = sum(zone_km.values())
+    if total_km == 0:
+        return f"No activities with distance data in the last {weeks} weeks."
+
+    _BAR = 14
+    lines = [
+        f"<b>Zone Breakdown — last {weeks} weeks ({total_km:.0f} km, "
+        f"{activity_count} activities)</b>",
+        "",
+    ]
+    for key in ("zone1", "zone2", "zone3", "zone4", "zone5", "unclassified"):
+        km = zone_km[key]
+        if km == 0:
+            continue
+        pct = km / total_km * 100
+        filled = round(pct / 100 * _BAR)
+        bar = "█" * filled + "░" * (_BAR - filled)
+        label = zone_labels[key]
+        lines.append(f"<code>{label:<14}  {bar}  {km:5.1f} km  {pct:4.1f}%</code>")
+
+    # Coaching note based on distribution
+    classified_km = total_km - zone_km["unclassified"]
+    if classified_km > 0:
+        z12_pct = (zone_km["zone1"] + zone_km["zone2"]) / total_km * 100
+        z3_pct = zone_km["zone3"] / total_km * 100
+        lines.append("")
+        if z3_pct > 20:
+            lines.append(
+                f"Zone 3 is {z3_pct:.0f}% of your volume — the grey zone. "
+                "Hard enough to accumulate fatigue, not hard enough to adapt. "
+                "Slow your easy runs down."
+            )
+        elif z12_pct < 65:
+            lines.append(
+                f"Only {z12_pct:.0f}% easy volume. "
+                "Aim for 70–80% in zones 1–2 to build base without excess fatigue."
+            )
+        else:
+            lines.append(f"{z12_pct:.0f}% easy volume — distribution looks healthy.")
+
+    return "\n".join(lines)
+
+
 def _format_status() -> str:
     """Brief status: last sync, plan exists, today's session."""
     from strava_utils import strava_sync
