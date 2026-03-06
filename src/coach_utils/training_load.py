@@ -41,12 +41,19 @@ def _get_lthr() -> float:
     return 170.0
 
 
-def calculate_load_metrics(activities: list[dict], lthr: float | None = None) -> dict:
+def calculate_load_metrics(
+    activities: list[dict],
+    lthr: float | None = None,
+    end_date: date | None = None,
+) -> dict:
     """Calculate CTL, ATL, TSB using exponentially-weighted moving averages.
 
     CTL: 42-day constant (chronic training load).
     ATL: 7-day constant (acute training load).
     TSB: CTL - ATL (training stress balance).
+
+    Args:
+        end_date: Calculate up to this date (default: today).
     """
     if lthr is None:
         lthr = _get_lthr()
@@ -64,7 +71,7 @@ def calculate_load_metrics(activities: list[dict], lthr: float | None = None) ->
         tss = _estimate_tss(act, lthr)
         tss_by_date[d] = tss_by_date.get(d, 0.0) + tss
 
-    today = datetime.now(tz=UTC).date()
+    today = end_date or datetime.now(tz=UTC).date()
     start = today - timedelta(days=364)
 
     ctl = 0.0

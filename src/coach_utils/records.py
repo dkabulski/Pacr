@@ -82,11 +82,16 @@ def scan_for_records(activities: list[dict]) -> dict:
                 best_time = t
                 best_activity = act
         if best_time is not None and best_activity is not None:
-            mins = int(best_time // 60)
+            hours = int(best_time // 3600)
+            mins = int((best_time % 3600) // 60)
             secs = int(best_time % 60)
+            if hours:
+                time_str = f"{hours}:{mins:02d}:{secs:02d}"
+            else:
+                time_str = f"{mins}:{secs:02d}"
             records[key] = {
                 "time_s": best_time,
-                "time_str": f"{mins}:{secs:02d}",
+                "time_str": time_str,
                 "date": best_activity.get("date", "")[:10],
                 "activity_id": best_activity.get("id"),
             }

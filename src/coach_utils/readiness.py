@@ -196,10 +196,9 @@ def assess_readiness(goal: str | None = None) -> dict:
     load_now = calculate_load_metrics(activities)
     result["ctl"] = load_now["ctl"]
 
-    # Calculate CTL from 28 days ago by excluding recent activities
-    cutoff_date = (datetime.now(tz=UTC) - timedelta(days=28)).strftime("%Y-%m-%d")
-    older_activities = [a for a in activities if a.get("date", "")[:10] < cutoff_date]
-    load_then = calculate_load_metrics(older_activities)
+    # Calculate CTL as of 28 days ago using end_date parameter
+    cutoff_date = (datetime.now(tz=UTC) - timedelta(days=28)).date()
+    load_then = calculate_load_metrics(activities, end_date=cutoff_date)
 
     if load_then["ctl"] > 0:
         ctl_change = load_now["ctl"] - load_then["ctl"]

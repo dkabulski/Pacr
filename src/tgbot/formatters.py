@@ -835,6 +835,10 @@ def _format_zone_breakdown(weeks: int = 4, sport_types: set[str] | None = None) 
         if avg_hr:
             result = classify_hr_zone(avg_hr, hr_zones)
             zone = result.get("zone", "unclassified")
+            if zone == "above_zone5":
+                zone = "zone5"
+            elif zone == "below_zone1":
+                zone = "zone1"
             zone_km[zone if zone in zone_km else "unclassified"] += km
         else:
             zone_km["unclassified"] += km

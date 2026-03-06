@@ -35,7 +35,9 @@ MONTH_NAMES: dict[str, int] = {
 
 # Activity-type sets (Strava type / sport_type values)
 _RUN_TYPES: set[str] = {"Run", "TrailRun", "VirtualRun"}
-_CYCLE_TYPES: set[str] = {"Ride", "VirtualRide", "EBikeRide", "MountainBikeRide"}
+_CYCLE_TYPES: set[str] = {
+    "Ride", "VirtualRide", "EBikeRide", "MountainBikeRide", "GravelRide",
+}
 _HIKE_TYPES: set[str] = {"Hike"}
 _SWIM_TYPES: set[str] = {"Swim"}
 _WALK_TYPES: set[str] = {"Walk"}
