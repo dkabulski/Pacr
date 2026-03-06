@@ -227,12 +227,27 @@ async def _run_analysis(new_act_ids: set[int], context: object, chat_id: str) ->
         )
         return
 
-    # Rules-based flags analysis
-    act_results: list[tuple[dict, dict]] = []
+    # Fetch laps/splits for activities missing them
+    for act in new_acts:
+        if not act.get("laps"):
+            try:
+                detail = await asyncio.to_thread(
+                    strava_sync._fetch_detail_fields, act["id"]
+                )
+                if detail.get("laps"):
+                    act["laps"] = detail["laps"]
+                if detail.get("splits_metric"):
+                    act["splits_metric"] = detail["splits_metric"]
+            except Exception:
+                pass
+
+    # Rules-based flags + split analysis
+    act_results: list[tuple[dict, dict, dict]] = []
     notes: list[str] = []
     for act in new_acts:
         result = await asyncio.to_thread(analyze._analyze_activity, act)
-        act_results.append((act, result))
+        split_data = await asyncio.to_thread(analyze.analyse_splits, act)
+        act_results.append((act, result, split_data))
         flags = result.get("flags", [])
         dist = act.get("distance_km", 0)
         pace = act.get("pace", "N/A")
@@ -245,10 +260,30 @@ async def _run_analysis(new_act_ids: set[int], context: object, chat_id: str) ->
             flags or "none",
         )
         header = f"{name} — {dist:.1f}km @ {pace}/km"
+        parts: list[str] = []
         if flags:
-            notes.append(header + "\n" + "\n".join(f"  ⚠ {f}" for f in flags))
+            parts.append(header)
+            parts.extend(f"  ⚠ {f}" for f in flags)
         else:
-            notes.append(f"{header} — on target.")
+            parts.append(f"{header} — on target.")
+
+        # Append split flags
+        split_flags = split_data.get("flags", [])
+        if split_flags:
+            parts.extend(f"  📊 {f}" for f in split_flags)
+
+        # Append lap summary
+        laps = act.get("laps", [])
+        if len(laps) > 1:
+            parts.append(f"\n<b>Laps ({len(laps)})</b>")
+            for i, lap in enumerate(laps, 1):
+                d = lap.get("distance_m", 0) / 1000
+                p = lap.get("pace", "N/A")
+                hr = lap.get("avg_hr")
+                hr_s = f"  HR {hr:.0f}" if hr else ""
+                parts.append(f"  {i}. {d:.2f}km  {p}/km{hr_s}")
+
+        notes.append("\n".join(parts))
     await context.bot.send_message(  # type: ignore[union-attr]
         chat_id=chat_id,
         text="<b>Activity analysis:</b>\n\n" + "\n\n".join(notes),
@@ -266,12 +301,15 @@ async def _run_analysis(new_act_ids: set[int], context: object, chat_id: str) ->
                 "Fetching descriptions for %d activities (may be slow)",
                 len(act_results),
             )
-        for act, result in act_results:
-            # Fetch description (not available from list API)
-            logger.info("Fetching description for activity %s", act["id"])
-            desc = await asyncio.to_thread(strava_sync._fetch_description, act["id"])
-            if desc:
-                logger.info("Description fetched (%d chars)", len(desc))
+        for act, result, split_data in act_results:
+            desc = act.get("description", "")
+            if not desc:
+                logger.info("Fetching description for activity %s", act["id"])
+                desc = await asyncio.to_thread(
+                    strava_sync._fetch_description, act["id"]
+                )
+                if desc:
+                    logger.info("Description fetched (%d chars)", len(desc))
             lines = [
                 f"Activity: {act.get('name', 'Run')}",
                 f"Distance: {act.get('distance_km', 0):.1f} km",
@@ -288,6 +326,23 @@ async def _run_analysis(new_act_ids: set[int], context: object, chat_id: str) ->
             flags = result.get("flags", [])
             if flags:
                 lines.append("Flags: " + "; ".join(flags))
+            # Include split pacing info
+            split_flags = split_data.get("flags", [])
+            if split_flags:
+                lines.append("Pacing: " + "; ".join(split_flags))
+            if split_data.get("cv"):
+                lines.append(f"Pace CV: {split_data['cv']:.1%}")
+            # Include lap data
+            laps = act.get("laps", [])
+            if len(laps) > 1:
+                lap_strs = []
+                for i, lap in enumerate(laps, 1):
+                    d = lap.get("distance_m", 0) / 1000
+                    p = lap.get("pace", "N/A")
+                    hr = lap.get("avg_hr")
+                    hr_s = f" HR {hr:.0f}" if hr else ""
+                    lap_strs.append(f"{i}. {d:.2f}km {p}/km{hr_s}")
+                lines.append("Laps: " + " | ".join(lap_strs))
             prompt = "\n".join(lines)
             logger.info("Requesting coaching opinion from Claude (%s)", CLAUDE_MODEL)
             try:
@@ -696,8 +751,21 @@ async def cmd_last(update: object, context: object) -> None:
             "No matching activities cached. Try /sync or change filter with /sport."
         )
         return
+    act = activities[0]
+    # Fetch laps on demand if not cached
+    if not act.get("laps"):
+        try:
+            detail = await asyncio.to_thread(
+                strava_sync._fetch_detail_fields, act["id"]
+            )
+            if detail.get("laps"):
+                act["laps"] = detail["laps"]
+            if detail.get("splits_metric"):
+                act["splits_metric"] = detail["splits_metric"]
+        except Exception:
+            pass  # show activity without laps
     await update.message.reply_text(  # type: ignore[union-attr]
-        _format_last_activity(activities[0]), parse_mode="HTML"
+        _format_last_activity(act), parse_mode="HTML"
     )
 
 

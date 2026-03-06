@@ -252,18 +252,22 @@ def sync(days: int = 365, fetch_descriptions: bool = True) -> None:
     existing_ids = {a["id"] for a in existing}
     new_acts = [a for a in normalised if a["id"] not in existing_ids]
     if fetch_descriptions and new_acts:
-        _MAX_DESC_FETCHES = 50
-        fetched_desc = 0
-        for act in new_acts[:_MAX_DESC_FETCHES]:
-            desc = _fetch_description(act["id"])
-            if desc:
-                act["description"] = desc
-                fetched_desc += 1
+        _MAX_DETAIL_FETCHES = 50
+        fetched = 0
+        for act in new_acts[:_MAX_DETAIL_FETCHES]:
+            detail = _fetch_detail_fields(act["id"])
+            if detail.get("description"):
+                act["description"] = detail["description"]
+            if detail.get("laps"):
+                act["laps"] = detail["laps"]
+            if detail.get("splits_metric"):
+                act["splits_metric"] = detail["splits_metric"]
+            fetched += 1
             _time.sleep(0.3)  # stay within 100 req/15 min rate limit
         logger.info(
-            "Fetched descriptions for %d/%d new activities",
-            fetched_desc,
-            min(len(new_acts), _MAX_DESC_FETCHES),
+            "Fetched detail for %d/%d new activities",
+            fetched,
+            min(len(new_acts), _MAX_DETAIL_FETCHES),
         )
 
     merged = _merge(existing, normalised)

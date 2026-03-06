@@ -454,6 +454,19 @@ def _format_last_activity(activity: dict) -> str:
     suffer = activity.get("suffer_score")
     if suffer:
         lines.append(f"Suffer score: {suffer}")
+
+    # Lap table (skip if only 1 lap = no manual laps)
+    laps = activity.get("laps") or []
+    if len(laps) > 1:
+        lines.append("")
+        lines.append(f"<b>Laps ({len(laps)})</b>")
+        for i, lap in enumerate(laps, 1):
+            dist_km = lap.get("distance_m", 0) / 1000
+            pace = lap.get("pace", "N/A")
+            hr = lap.get("avg_hr")
+            hr_part = f"  HR {hr:.0f}" if hr else ""
+            lines.append(f"  {i}. {dist_km:.2f} km  {pace}/km{hr_part}")
+
     return "\n".join(lines)
 
 
