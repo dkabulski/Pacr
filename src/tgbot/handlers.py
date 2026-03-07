@@ -562,12 +562,26 @@ async def cmd_sync(update: object, context: object) -> None:
         await asyncio.to_thread(strava_sync.sync, days)
         activities = await asyncio.to_thread(strava_sync._load_cached)
         logger.info("/sync complete: %d activities cached", len(activities))
-        from memory.store import index_activities, index_debriefs
+        from memory.store import (
+            index_activities,
+            index_debriefs,
+            index_race_results,
+            index_wellness,
+        )
         from tgbot.debrief import load_debriefs
 
         indexed = await asyncio.to_thread(index_activities, activities)
         debriefs = await asyncio.to_thread(load_debriefs)
         await asyncio.to_thread(index_debriefs, debriefs)
+        # Index race results + wellness on sync
+        try:
+            from coach_utils.wellness import _load_log
+            from strava_utils.pot10 import _load_results
+
+            await asyncio.to_thread(index_race_results, _load_results())
+            await asyncio.to_thread(index_wellness, _load_log())
+        except Exception:
+            logger.debug("race/wellness indexing failed", exc_info=True)
         await update.message.reply_text(  # type: ignore[union-attr]
             f"Sync complete. {len(activities)} activities cached, "
             f"{indexed} indexed to memory.",
@@ -1131,6 +1145,31 @@ async def cmd_predict(update: object, context: object) -> None:
     await update.message.reply_text(text, parse_mode="HTML")  # type: ignore[union-attr]
 
 
+async def cmd_memory(update: object, context: object) -> None:
+    from memory.store import memory_stats
+
+    stats = await asyncio.to_thread(memory_stats)
+    if not stats["available"]:
+        await update.message.reply_text(  # type: ignore[union-attr]
+            "ChromaDB unavailable."
+        )
+        return
+    lines = [
+        "<b>Coaching Memory</b>",
+        f"Documents: {stats['total']}",
+        f"Disk: {stats['disk_mb']} MB",
+        "",
+    ]
+    cats = stats.get("categories", {})
+    if cats:
+        for cat, n in sorted(cats.items(), key=lambda x: -x[1]):
+            label = cat.replace("_", " ").title()
+            lines.append(f"  {label}: {n}")
+    await update.message.reply_text(  # type: ignore[union-attr]
+        "\n".join(lines), parse_mode="HTML"
+    )
+
+
 async def cmd_help(update: object, context: object) -> None:
     text = (
         "<b>Available Commands</b>\n\n"
@@ -1164,6 +1203,7 @@ async def cmd_help(update: object, context: object) -> None:
         "/wellness resolve &lt;id&gt; — Mark an issue resolved\n"
         "/sport [type] — Set activity type filter (run/ride/hike/swim/walk/all)\n"
         "/model [haiku|sonnet|opus] — Switch AI model for chat\n"
+        "/memory — Show coaching memory stats\n"
         "/clear — Clear conversation history\n"
         "/help — Show this help message"
     )

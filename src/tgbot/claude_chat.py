@@ -406,11 +406,25 @@ def execute_tools(msg: object) -> list:
                 strava_sync.sync(days)
                 note = _auto_analyse_new_activities(before_ids)
                 all_acts = strava_sync._load_cached()
-                from memory.store import index_activities, index_debriefs
+                from memory.store import (
+                    index_activities,
+                    index_debriefs,
+                    index_race_results,
+                    index_wellness,
+                )
                 from tgbot.debrief import load_debriefs
 
                 indexed = index_activities(all_acts)
                 index_debriefs(load_debriefs())
+                # Index race results + wellness
+                try:
+                    from coach_utils.wellness import _load_log
+                    from strava_utils.pot10 import _load_results
+
+                    index_race_results(_load_results())
+                    index_wellness(_load_log())
+                except Exception:
+                    logger.debug("race/wellness indexing failed", exc_info=True)
 
                 from coach_utils.records import check_new_records
 
@@ -709,6 +723,14 @@ def execute_tools(msg: object) -> list:
             else:
                 try:
                     entry = wellness_log(entry_type, body_part, severity, notes)
+                    # Index wellness to ChromaDB
+                    try:
+                        from coach_utils.wellness import _load_log
+                        from memory.store import index_wellness
+
+                        index_wellness(_load_log())
+                    except Exception:
+                        logger.debug("wellness indexing failed", exc_info=True)
                     result = (
                         f"Logged: {entry_type} in {body_part}, "
                         f"severity {entry['severity']}/10. "
