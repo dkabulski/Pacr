@@ -456,10 +456,11 @@ def _build_static_context(sport_key: str = "run") -> str:
     else:
         lines.append("\nNo recent activities cached.")
 
-    # Race results (last 5) + VDOT
+    # Race results (last 10 by date) + VDOT
     results = pot10._load_results()
     if results:
-        lines.append("\nRecent race results:")
+        sorted_results = sorted(results, key=lambda r: r.get("date", ""), reverse=True)
+        lines.append(f"\nRace history: {len(results)} races on file. Most recent 10:")
         best_vdot: float | None = None
         best_vdot_result: dict | None = None
         dist_map = {
@@ -471,9 +472,15 @@ def _build_static_context(sport_key: str = "run") -> str:
             "half marathon": 21.0975,
             "marathon": 42.195,
         }
-        for r in results[:5]:
+        for r in sorted_results[:10]:
             time_str = r.get("time", "")
-            lines.append(f"  {r.get('date', '?')} {r.get('event', '?')} — {time_str}.")
+            dist_str = r.get("distance", "")
+            lines.append(
+                f"  {r.get('date', '?')} {r.get('event', '?')} {dist_str} — {time_str}."
+            )
+        # Compute best VDOT from ALL results
+        for r in results:
+            time_str = r.get("time", "")
             _dm = re.match(r"(\d+(?:\.\d+)?)\s*km", r.get("distance", "").lower())
             if _dm:
                 dist_km = float(_dm.group(1))
