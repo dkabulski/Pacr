@@ -121,6 +121,19 @@ TOOLS = [
         },
     },
     {
+        "name": "get_race_results",
+        "description": (
+            "Load all race results from history. Returns a list of races "
+            "with date, event, distance, time, position, and notes. "
+            "Use this to answer questions about race history, PBs, "
+            "race counts, or comparisons between races."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
         "name": "compute_distance",
         "description": (
             "Calculate total distance and activity count for a sport over a "
@@ -461,6 +474,34 @@ def execute_tools(msg: object) -> list:
                     )
             except Exception as e:
                 result = f"Sync failed: {e}"
+        elif block.name == "get_race_results":
+            try:
+                from strava_utils.pot10 import _load_results
+
+                races = _load_results()
+                if not races:
+                    result = "No race results on file."
+                else:
+                    lines = [f"{len(races)} races on file:\n"]
+                    for r in sorted(
+                        races,
+                        key=lambda x: x.get("date", ""),
+                        reverse=True,
+                    ):
+                        pos = r.get("position")
+                        pos_s = f" #{pos}" if pos else ""
+                        notes = r.get("notes", "")
+                        notes_s = f" ({notes})" if notes else ""
+                        lines.append(
+                            f"  {r.get('date', '?')} "
+                            f"{r.get('event', '?')} "
+                            f"{r.get('distance', '?')} "
+                            f"{r.get('time', '?')}"
+                            f"{pos_s}{notes_s}"
+                        )
+                    result = "\n".join(lines)
+            except Exception as e:
+                result = f"Failed to load race results: {e}"
         elif block.name == "save_memory":
             from datetime import UTC, datetime
 
