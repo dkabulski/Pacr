@@ -10,14 +10,23 @@ COPY src/ src/
 COPY SKILL.md .
 COPY config/ config/
 
-# Pre-cache dependencies for each script
-RUN uv run --script src/strava_utils/strava_sync.py --help > /dev/null 2>&1 || true
-RUN uv run --script src/strava_utils/pot10.py --help > /dev/null 2>&1 || true
-RUN uv run --script src/coach_utils/plan.py --help > /dev/null 2>&1 || true
-RUN uv run --script src/coach_utils/analyze.py --help > /dev/null 2>&1 || true
-RUN uv run --script src/tgbot/bot.py --help > /dev/null 2>&1 || true
+# Pre-cache dependencies for each script (fail build if install breaks)
+RUN uv run --script src/strava_utils/strava_sync.py --help > /dev/null 2>&1
+RUN uv run --script src/strava_utils/pot10.py --help > /dev/null 2>&1
+RUN uv run --script src/coach_utils/plan.py --help > /dev/null 2>&1
+RUN uv run --script src/coach_utils/analyze.py --help > /dev/null 2>&1
+RUN uv run --script src/tgbot/bot.py --help > /dev/null 2>&1
 
 # Data directory (mount as volume)
 RUN mkdir -p /skill/data
+
+# Run as non-root user
+RUN groupadd --gid 1000 pacr && \
+    useradd --uid 1000 --gid pacr --create-home pacr && \
+    chown -R pacr:pacr /skill && \
+    mkdir -p /home/pacr/.cache && \
+    cp -r /root/.cache/uv /home/pacr/.cache/uv && \
+    chown -R pacr:pacr /home/pacr/.cache
+USER pacr
 
 CMD ["echo", "Pacr skill ready. Use uv run src/<script>.py <command>."]

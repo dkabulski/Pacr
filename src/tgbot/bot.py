@@ -1,13 +1,13 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "python-telegram-bot[job-queue]>=21.0",
+#     "python-telegram-bot[job-queue]>=22.0",
 #     "fire>=0.7",
 #     "python-dotenv>=1.0",
 #     "requests>=2.32",
 #     "beautifulsoup4>=4.12",
-#     "anthropic>=0.30",
-#     "chromadb>=0.6",
+#     "anthropic>=0.49",
+#     "chromadb>=1.0",
 # ]
 # ///
 """Telegram integration — send notifications and interactive bot."""
