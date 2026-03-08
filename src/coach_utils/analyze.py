@@ -201,7 +201,7 @@ def _analyze_run(
                 )
 
         # Flag quality sessions done too easy
-        if prescribed_type in ("tempo", "intervals", "long", "race"):
+        if prescribed_type in ("tempo", "intervals", "race"):
             hr_zone = analysis.get("hr_zone", {})
             zone = hr_zone.get("zone", "")
             if zone in ("zone1", "zone2", "below_zone1"):

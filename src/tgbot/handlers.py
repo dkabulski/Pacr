@@ -49,7 +49,7 @@ from tgbot.km_query import (
 
 logger = logging.getLogger("pacr")
 
-_MAX_HISTORY = 20  # individual messages (~10 conversational turns)
+_MAX_HISTORY = 60  # individual messages (~30 conversational turns)
 _BLOCKED_FILES = {"tokens.json"}  # never exposed to the model
 _MAX_CHATS = 5
 _RATE_LIMIT = 5
@@ -332,29 +332,24 @@ async def _run_analysis(new_act_ids: set[int], context: object, chat_id: str) ->
                 lines.append("Pacing: " + "; ".join(split_flags))
             if split_data.get("cv"):
                 lines.append(f"Pace CV: {split_data['cv']:.1%}")
-            # Include lap data
-            laps = act.get("laps", [])
-            if len(laps) > 1:
-                lap_strs = []
-                for i, lap in enumerate(laps, 1):
-                    d = lap.get("distance_m", 0) / 1000
-                    p = lap.get("pace", "N/A")
-                    hr = lap.get("avg_hr")
-                    hr_s = f" HR {hr:.0f}" if hr else ""
-                    lap_strs.append(f"{i}. {d:.2f}km {p}/km{hr_s}")
-                lines.append("Laps: " + " | ".join(lap_strs))
+            # Include HR zone context (no individual lap data for Claude)
+            hr_zone = result.get("hr_zone", {})
+            if hr_zone:
+                lines.append(
+                    f"HR zone: {hr_zone.get('label', '')} "
+                    f"({hr_zone.get('zone', '')})"
+                )
+            # Use full athlete context (plan, zones, recent sessions, VDOT, etc.)
+            from tgbot.context import _build_static_context
+
+            system_prompt = _build_static_context()
             prompt = "\n".join(lines)
             logger.info("Requesting coaching opinion from Claude (%s)", CLAUDE_MODEL)
             try:
                 msg = client.messages.create(
                     model=CLAUDE_MODEL,
-                    max_tokens=180,
-                    system=(
-                        "You are a direct, experienced running coach. "
-                        "Give a 2–3 sentence coaching reaction to this activity. "
-                        "Be specific to the numbers, honest, and concise. "
-                        "Don't shy away from humour"
-                    ),
+                    max_tokens=60,
+                    system=system_prompt,
                     messages=[{"role": "user", "content": prompt}],
                 )
                 opinion = next((b.text for b in msg.content if hasattr(b, "text")), "")
@@ -378,15 +373,6 @@ async def _run_analysis(new_act_ids: set[int], context: object, chat_id: str) ->
         parse_mode="HTML",
     )
 
-    # Motivational quote after every run
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    try:
-        quote = await asyncio.to_thread(_motivation_quote, api_key)
-        await context.bot.send_message(  # type: ignore[union-attr]
-            chat_id=chat_id, text=f"<i>{quote}</i>", parse_mode="HTML"
-        )
-    except Exception:
-        logger.debug("Post-run motivation quote failed — skipping", exc_info=True)
 
 
 async def _heartbeat(context: object) -> None:
