@@ -556,7 +556,8 @@ async def cmd_sync(update: object, context: object) -> None:
         )
         from tgbot.debrief import load_debriefs
 
-        indexed = await asyncio.to_thread(index_activities, activities)
+        new_activities = [a for a in activities if a["id"] not in before_ids]
+        indexed = await asyncio.to_thread(index_activities, new_activities)
         debriefs = await asyncio.to_thread(load_debriefs)
         await asyncio.to_thread(index_debriefs, debriefs)
         # Index race results + wellness on sync
