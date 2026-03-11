@@ -284,11 +284,19 @@ async def _run_analysis(new_act_ids: set[int], context: object, chat_id: str) ->
                 parts.append(f"  {i}. {d:.2f}km  {p}/km{hr_s}")
 
         notes.append("\n".join(parts))
+    analysis_text = "Activity analysis:\n\n" + "\n\n".join(notes)
     await context.bot.send_message(  # type: ignore[union-attr]
         chat_id=chat_id,
-        text="<b>Activity analysis:</b>\n\n" + "\n\n".join(notes),
+        text=f"<b>{analysis_text}</b>"
+        if not analysis_text.startswith("<b>")
+        else analysis_text,
         parse_mode="HTML",
     )
+
+    # Inject analysis into conversation history so follow-ups have context
+    cid = int(chat_id)
+    history = config.conversation_history.setdefault(cid, [])
+    history.append({"role": "assistant", "content": analysis_text})
 
     # Coaching opinion via Claude — one per activity
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -332,12 +340,26 @@ async def _run_analysis(new_act_ids: set[int], context: object, chat_id: str) ->
                 lines.append("Pacing: " + "; ".join(split_flags))
             if split_data.get("cv"):
                 lines.append(f"Pace CV: {split_data['cv']:.1%}")
-            # Include HR zone context (no individual lap data for Claude)
+            # Include lap data for quality sessions (intervals, tempo, race)
+            # but not for easy/long runs where it causes over-analysis
+            prescribed = result.get("prescribed") or {}
+            prescribed_type = prescribed.get("type", "").lower()
+            if prescribed_type in ("intervals", "tempo", "race", "workout"):
+                laps = act.get("laps", [])
+                if len(laps) > 1:
+                    lap_strs = []
+                    for i, lap in enumerate(laps, 1):
+                        d = lap.get("distance_m", 0) / 1000
+                        p = lap.get("pace", "N/A")
+                        hr = lap.get("avg_hr")
+                        hr_s = f" HR {hr:.0f}" if hr else ""
+                        lap_strs.append(f"{i}. {d:.2f}km {p}/km{hr_s}")
+                    lines.append("Laps: " + " | ".join(lap_strs))
+            # Include HR zone context
             hr_zone = result.get("hr_zone", {})
             if hr_zone:
                 lines.append(
-                    f"HR zone: {hr_zone.get('label', '')} "
-                    f"({hr_zone.get('zone', '')})"
+                    f"HR zone: {hr_zone.get('label', '')} ({hr_zone.get('zone', '')})"
                 )
             # Use full athlete context (plan, zones, recent sessions, VDOT, etc.)
             from tgbot.context import _build_static_context
@@ -348,7 +370,9 @@ async def _run_analysis(new_act_ids: set[int], context: object, chat_id: str) ->
             try:
                 msg = client.messages.create(
                     model=CLAUDE_MODEL,
-                    max_tokens=60,
+                    max_tokens=160
+                    if prescribed_type in ("intervals", "tempo", "race", "workout")
+                    else 120,
                     system=system_prompt,
                     messages=[{"role": "user", "content": prompt}],
                 )
@@ -358,6 +382,7 @@ async def _run_analysis(new_act_ids: set[int], context: object, chat_id: str) ->
                     await context.bot.send_message(  # type: ignore[union-attr]
                         chat_id=chat_id, text=opinion
                     )
+                    history.append({"role": "assistant", "content": opinion})
             except Exception:
                 logger.exception("Coaching opinion failed — continuing")
 
@@ -366,13 +391,13 @@ async def _run_analysis(new_act_ids: set[int], context: object, chat_id: str) ->
         "activity_id": act["id"],
         "activity_name": act.get("name", "Run"),
         "activity_date": act.get("date", "")[:10],
+        "asked_at": datetime.now(tz=UTC).timestamp(),
     }
     await context.bot.send_message(  # type: ignore[union-attr]
         chat_id=chat_id,
         text="How did that feel? Reply with RPE 1–10 … or <code>skip</code>.",
         parse_mode="HTML",
     )
-
 
 
 async def _heartbeat(context: object) -> None:
@@ -591,6 +616,7 @@ async def cmd_sync(update: object, context: object) -> None:
                 "activity_id": act["id"],
                 "activity_name": act.get("name", "Run"),
                 "activity_date": act.get("date", "")[:10],
+                "asked_at": datetime.now(tz=UTC).timestamp(),
             }
             await update.message.reply_text(  # type: ignore[union-attr]
                 "How did that feel? Reply with RPE 1–10 … or <code>skip</code>.",
@@ -1317,6 +1343,14 @@ async def cmd_message(update: object, context: object) -> None:
 
     pending = config.pending_debriefs.get(cid)
     if pending:
+        # Auto-expire debrief prompt after 5 minutes
+        from datetime import datetime as _dt
+
+        asked_at = pending.get("asked_at", 0)
+        if _dt.now(tz=UTC).timestamp() - asked_at > 300:
+            config.pending_debriefs.pop(cid, None)
+            pending = None
+    if pending:
         if user_text.strip().lower() == "skip":
             config.pending_debriefs.pop(cid, None)
             await update.message.reply_text("Skipped.")  # type: ignore[union-attr]
@@ -1340,10 +1374,8 @@ async def cmd_message(update: object, context: object) -> None:
             config.pending_debriefs.pop(cid, None)
             await update.message.reply_text(f"RPE {rpe}/10 logged.")  # type: ignore[union-attr]
             return
-        await update.message.reply_text(  # type: ignore[union-attr]
-            "Please reply with 1–10 or <code>skip</code>.", parse_mode="HTML"
-        )
-        return
+        # Not a valid RPE — clear the prompt and fall through to normal chat
+        config.pending_debriefs.pop(cid, None)
 
     pending_analysis = config.pending_analysis.get(cid)
     if pending_analysis and "ready" in user_text.lower():
