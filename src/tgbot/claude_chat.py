@@ -176,16 +176,28 @@ TOOLS = [
     {
         "name": "lookup_activities",
         "description": (
-            "Search cached Strava activities by date range and/or workout type. "
-            "Use this when the athlete asks about a specific past run, a particular "
-            "date, their longest run, fastest pace, any historical session detail "
-            "beyond the last four weeks, or questions about races, workouts, or "
-            "long runs specifically. Use sort_by='distance_desc' with limit=10 "
-            "to find the longest runs — do NOT use limit > 100."
+            "Search cached Strava activities by date range, workout type, and/or "
+            "text query. Use this when the athlete asks about a specific past run, "
+            "a particular date, runs with a specific person, their longest run, "
+            "fastest pace, any historical session detail beyond the last four weeks, "
+            "or questions about races, workouts, or long runs specifically. "
+            "Use the 'query' parameter to search activity names and descriptions "
+            "(e.g. 'Philip', 'parkrun', 'track'). "
+            "Use sort_by='distance_desc' with limit=10 to find the longest runs. "
+            "Use count_only=true when the athlete just wants a count (e.g. "
+            "'how many runs with X'). Always search — never say you can't or "
+            "ask the athlete to narrow down."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
+                "query": {
+                    "type": "string",
+                    "description": (
+                        "Case-insensitive text search on activity name and "
+                        "description. E.g. 'Philip', 'parkrun', 'track'."
+                    ),
+                },
                 "date_from": {
                     "type": "string",
                     "description": "Start date YYYY-MM-DD (inclusive)",
@@ -219,9 +231,13 @@ TOOLS = [
                 },
                 "limit": {
                     "type": "integer",
+                    "description": "Max activities to return (default 10, max 100).",
+                },
+                "count_only": {
+                    "type": "boolean",
                     "description": (
-                        "Max activities to return (default 10, max 100). "
-                        "Use compute_distance for counting large sets."
+                        "If true, return only the count of matching activities "
+                        "instead of full details. Use for 'how many' questions."
                     ),
                 },
             },
@@ -604,6 +620,7 @@ def execute_tools(msg: object) -> list:
             date_to = inp.get("date_to", "9999-12-31")
             limit = min(int(inp.get("limit", 10)), 100)
             workout_type_filter = inp.get("workout_type", "")
+            text_query = inp.get("query", "").lower()
             sort_by = inp.get("sort_by", "date_desc")
             from memory.store import _WORKOUT_TYPE_LABELS
 
@@ -630,15 +647,29 @@ def execute_tools(msg: object) -> list:
                     )
                     == workout_type_filter
                 )
+                and (
+                    not text_query
+                    or text_query in a.get("name", "").lower()
+                    or text_query in (a.get("description", "") or "").lower()
+                )
             ]
-            filtered.sort(
-                key=_sort_keys.get(sort_by, _sort_keys["date_desc"]),
-                reverse=_sort_reverse.get(sort_by, True),
-            )
-            acts = filtered[:limit]
-            if not acts:
-                result = "No activities found for those filters."
+            count_only = inp.get("count_only", False)
+            if count_only:
+                total_km = sum(a.get("distance_km", 0) for a in filtered)
+                result = (
+                    f"{len(filtered)} activit"
+                    f"{'y' if len(filtered) == 1 else 'ies'} found"
+                    f" ({total_km:.0f} km total)."
+                )
             else:
+                filtered.sort(
+                    key=_sort_keys.get(sort_by, _sort_keys["date_desc"]),
+                    reverse=_sort_reverse.get(sort_by, True),
+                )
+                acts = filtered[:limit]
+            if not count_only and not filtered:
+                result = "No activities found for those filters."
+            elif not count_only:
                 rows = []
                 for a in acts:
                     date = a.get("date", "")[:10]

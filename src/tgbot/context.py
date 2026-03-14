@@ -228,7 +228,7 @@ def _build_static_context(sport_key: str = "run") -> str:
     if soul_path.exists():
         lines.append(soul_path.read_text().strip())
 
-    lines.append(f"\nToday's date is {datetime.now(tz=UTC).strftime('%Y-%m-%d')}.")
+    lines.append(f"\nToday is {datetime.now(tz=UTC).strftime('%A %Y-%m-%d')}.")
     focus = "all sports" if sport_key == "all" else sport_key
     lines.append(f"The athlete's current activity focus is: {focus}.")
 
@@ -246,8 +246,13 @@ def _build_static_context(sport_key: str = "run") -> str:
             marker = " ← current week" if is_current else ""
             lines.append(f"\nWeek {i + 1} ({phase}){marker}:")
             for s in sessions:
+                sdate = s.get("date", "")
+                try:
+                    day_name = datetime.fromisoformat(sdate).strftime("%a")
+                except (ValueError, TypeError):
+                    day_name = ""
                 lines.append(
-                    f"  {s.get('date', '')} — {s.get('type', '')}: "
+                    f"  {sdate} ({day_name}) — {s.get('type', '')}: "
                     f"{s.get('description', '')}"
                 )
     else:
@@ -360,12 +365,24 @@ def _build_static_context(sport_key: str = "run") -> str:
     except Exception:
         pass
 
-    # Today's session
+    # Today's and tomorrow's sessions — explicit to avoid date confusion
     session = _today_session()
     if session:
         stype = session.get("type", "")
         desc = session.get("description", "")
         lines.append(f"\nToday's prescribed session: {stype} — {desc}.")
+
+    tomorrow = (datetime.now(tz=UTC) + timedelta(days=1)).strftime("%Y-%m-%d")
+    tomorrow_day = (datetime.now(tz=UTC) + timedelta(days=1)).strftime("%A")
+    if p:
+        for week in p.get("weeks", []):
+            for s in week.get("sessions", []):
+                if s.get("date") == tomorrow:
+                    lines.append(
+                        f"Tomorrow ({tomorrow_day} {tomorrow}) prescribed session: "
+                        f"{s.get('type', '')} — {s.get('description', '')}."
+                    )
+                    break
 
     # Activities: individual detail for last 4 weeks,
     # weekly summaries for all older history
@@ -654,7 +671,7 @@ def _generate_plan_with_claude(
     )
 
     system_prompt = f"""You are an expert running coach who generates training plans.
-Today's date is {today}.
+Today is {today_dt.strftime("%A")} {today}.
 
 Athlete's recent fitness data:
 {fitness_context}

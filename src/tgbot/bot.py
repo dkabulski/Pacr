@@ -39,6 +39,8 @@ STRAVA_ANALYSIS_DELAY = int(os.environ.get("STRAVA_ANALYSIS_DELAY", "600"))  # 1
 MORNING_CHECKIN_HOUR = int(os.environ.get("MORNING_CHECKIN_HOUR", "8"))
 WEEKLY_DEBRIEF_HOUR = int(os.environ.get("WEEKLY_DEBRIEF_HOUR", "19"))
 STRAVA_WEBHOOK_PORT = int(os.environ.get("STRAVA_WEBHOOK_PORT", "0"))
+TELEGRAM_WEBHOOK_URL = os.environ.get("TELEGRAM_WEBHOOK_URL", "")
+TELEGRAM_WEBHOOK_PORT = int(os.environ.get("TELEGRAM_WEBHOOK_PORT", "8443"))
 
 # Re-export from submodules so tests can import via `tgbot.bot.*`
 from tgbot.claude_chat import (  # noqa: E402, F401
@@ -180,7 +182,7 @@ def send_summary(period: str = "daily") -> None:
 
 
 def bot() -> None:
-    """Start the interactive Telegram bot (long-polling)."""
+    """Start the interactive Telegram bot (polling or webhook mode)."""
     from telegram import BotCommand
     from telegram.ext import (
         ApplicationBuilder,
@@ -346,7 +348,21 @@ def bot() -> None:
         app.job_queue.run_repeating(_webhook_event_checker, interval=60, first=30)
         logger.info("Webhook event checker scheduled (every 60 s)")
 
-    app.run_polling()
+    if TELEGRAM_WEBHOOK_URL:
+        logger.info(
+            "Starting bot in WEBHOOK mode (url=%s, port=%d)",
+            TELEGRAM_WEBHOOK_URL,
+            TELEGRAM_WEBHOOK_PORT,
+        )
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=TELEGRAM_WEBHOOK_PORT,
+            url_path="/telegram",
+            webhook_url=f"{TELEGRAM_WEBHOOK_URL}/telegram",
+        )
+    else:
+        logger.info("Starting bot in POLLING mode")
+        app.run_polling()
 
 
 def morning_briefing() -> None:
